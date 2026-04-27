@@ -102,6 +102,37 @@
       <button data-quickfilter="entity"   class="quickfilter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200">LLC/Trust <span class="opacity-60 ml-1" data-count="entity"></span></button>
       <span id="tagFilters" class="flex items-center gap-2 flex-wrap"></span>
     </div>
+
+    <!-- Bulk action toolbar -->
+    <div class="max-w-screen-2xl mx-auto px-4 py-2 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap text-sm">
+      <div class="flex items-center gap-3 flex-wrap">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" id="selectAll" class="rounded border-slate-300">
+          <span id="selectionStatus" class="text-slate-600">Select all visible</span>
+        </label>
+        <div id="bulkBar" class="hidden flex items-center gap-2 flex-wrap">
+          <span class="text-slate-300">|</span>
+          <button id="bulkQueue" class="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Queue for outreach</button>
+          <select id="bulkStatus" class="border border-slate-300 rounded-lg px-2 py-1 bg-white">
+            <option value="">Set status…</option>
+            <option value="new">New</option>
+            <option value="queued">Queued</option>
+            <option value="t1_sent">T1 sent</option>
+            <option value="replied">Replied</option>
+            <option value="engaged">Engaged</option>
+            <option value="not_interested">Not interested</option>
+            <option value="do_not_contact">Do not contact</option>
+            <option value="bad_number">Bad number</option>
+          </select>
+          <input id="bulkTag" type="text" placeholder="Add tag to all…"
+                 class="px-2 py-1 border border-slate-300 rounded-lg w-40 focus:ring-2 focus:ring-slate-900 focus:outline-none" />
+          <button id="bulkClear" class="text-slate-500 hover:text-slate-900 px-2">Clear</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="exportCsv" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg">Export CSV</button>
+      </div>
+    </div>
   </header>
 
   <!-- Lead list -->
@@ -174,6 +205,7 @@ let currentSort = 'score'
 let activeTags = new Set()
 let searchTerm = ''
 let session = null
+let selectedIds = new Set()
 
 // ─────── AUTH ───────
 async function init() {
@@ -381,11 +413,66 @@ function renderList() {
   const container = document.getElementById('leadList')
   const empty = document.getElementById('emptyMsg')
   container.innerHTML = ''
-  if (filtered.length === 0) { empty.classList.remove('hidden'); return }
+  if (filtered.length === 0) {
+    empty.classList.remove('hidden')
+    refreshSelectionUI()
+    return
+  }
   empty.classList.add('hidden')
   container.innerHTML = filtered.map(renderRow).join('')
+  // Open panel on row body click; checkbox click is handled separately
   container.querySelectorAll('[data-id]').forEach(el => {
-    el.addEventListener('click', () => openPanel(el.dataset.id))
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('input[type="checkbox"]')) return
+      openPanel(el.dataset.id)
+    })
+  })
+  // Checkbox toggles
+  container.querySelectorAll('input[data-rowcheck]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const id = cb.dataset.rowcheck
+      if (cb.checked) selectedIds.add(id); else selectedIds.delete(id)
+      refreshSelectionUI()
+    })
+  })
+  refreshSelectionUI()
+}
+
+function refreshSelectionUI() {
+  const visibleIds = filtered.map(l => l.id)
+  // Drop selections no longer visible (filter changed)
+  for (const id of [...selectedIds]) if (!visibleIds.includes(id)) selectedIds.delete(id)
+
+  const allCheck = document.getElementById('selectAll')
+  const status = document.getElementById('selectionStatus')
+  const bulkBar = document.getElementById('bulkBar')
+  const exportBtn = document.getElementById('exportCsv')
+
+  const n = selectedIds.size
+  if (n > 0) {
+    status.textContent = `${n} selected`
+    bulkBar.classList.remove('hidden')
+    bulkBar.classList.add('flex')
+    exportBtn.textContent = `Export CSV (${n} selected)`
+  } else {
+    status.textContent = `Select all visible (${filtered.length})`
+    bulkBar.classList.add('hidden')
+    bulkBar.classList.remove('flex')
+    exportBtn.textContent = `Export CSV (${filtered.length})`
+  }
+  // Master checkbox state
+  if (filtered.length === 0) {
+    allCheck.checked = false; allCheck.indeterminate = false
+  } else if (n === 0) {
+    allCheck.checked = false; allCheck.indeterminate = false
+  } else if (n === filtered.length) {
+    allCheck.checked = true; allCheck.indeterminate = false
+  } else {
+    allCheck.checked = false; allCheck.indeterminate = true
+  }
+  // Sync row checkboxes
+  document.querySelectorAll('input[data-rowcheck]').forEach(cb => {
+    cb.checked = selectedIds.has(cb.dataset.rowcheck)
   })
 }
 
@@ -413,7 +500,8 @@ function renderRow(l) {
   ).join('')
 
   return `
-  <div data-id="${l.id}" class="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4 cursor-pointer hover:border-slate-400 hover:shadow-sm transition">
+  <div data-id="${l.id}" class="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:border-slate-400 hover:shadow-sm transition">
+    <input type="checkbox" data-rowcheck="${l.id}" class="rounded border-slate-300 cursor-pointer" />
     <div class="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center text-slate-300">
       ${l.photo_url ? `<img src="${escape(l.photo_url)}" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-cover" onerror="this.style.display='none';this.parentNode.textContent='🏠'">` : '🏠'}
     </div>
@@ -526,6 +614,11 @@ function openPanel(id) {
       <span id="saveStatus" class="ml-2 text-sm text-green-600 hidden">Saved.</span>
     </div>
 
+    <div class="mb-4 border-t border-slate-200 pt-4">
+      <h3 class="text-xs font-semibold uppercase text-slate-500 mb-2">Messages</h3>
+      <div id="messagesList" class="space-y-2 text-sm text-slate-400">Loading…</div>
+    </div>
+
     <div class="border-t border-slate-200 pt-4 mt-4">
       <h3 class="text-xs font-semibold uppercase text-slate-500 mb-2">Move to status</h3>
       <div class="flex flex-wrap gap-2 mb-3">
@@ -613,6 +706,36 @@ function openPanel(id) {
   const p = document.getElementById('panel')
   o.classList.remove('hidden'); p.classList.remove('hidden')
   requestAnimationFrame(() => { p.classList.remove('panel-enter'); p.classList.add('panel-active') })
+
+  // Fetch + render messages async
+  loadMessages(id)
+}
+
+async function loadMessages(leadId) {
+  const wrap = document.getElementById('messagesList')
+  if (!wrap) return
+  const { data, error } = await sb
+    .from('touches')
+    .select('id, direction, channel, body, sent_at, delivered_at, created_at, status, from_number, to_number')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: true })
+    .limit(100)
+  if (error) { wrap.innerHTML = `<span class="text-red-600">Error: ${escape(error.message)}</span>`; return }
+  if (!data || data.length === 0) {
+    wrap.innerHTML = `<span class="text-slate-400">No messages yet.</span>`
+    return
+  }
+  wrap.innerHTML = data.map(t => {
+    const out = t.direction === 'outbound'
+    const time = new Date(t.sent_at || t.created_at).toLocaleString()
+    return `
+      <div class="flex ${out ? 'justify-end' : 'justify-start'}">
+        <div class="${out ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-900'} max-w-[85%] rounded-lg px-3 py-2">
+          <div class="text-xs opacity-70 mb-0.5">${escape(t.channel)} ${out ? '→' : '←'} ${escape(time)}${t.status ? ' · ' + escape(t.status) : ''}</div>
+          <div class="whitespace-pre-wrap">${escape(t.body || '')}</div>
+        </div>
+      </div>`
+  }).join('')
 }
 
 // ─────── HELPERS ───────
@@ -620,6 +743,108 @@ function escape(s) {
   if (s == null) return ''
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
 }
+
+function csvCell(v) {
+  if (v === null || v === undefined) return ''
+  const s = Array.isArray(v) ? v.join('|') : String(v)
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+function downloadCsv(rows, filename) {
+  const cols = ['id','owner_full_name','owner_entity_name','property_address','parcel_id_primary',
+    'mailing_address','mailing_city','mailing_state','mailing_zip',
+    'distress_score','year_built','assessed_value','primary_phone','secondary_phone',
+    'current_stage','priority','tags','cohorts','distress_notes','assessor_url','photo_url']
+  const lines = [cols.join(',')]
+  for (const r of rows) {
+    const cohorts = (r.lead_sources || []).map(s => s.source).join('|')
+    const tags = (r.tags || []).join('|')
+    const row = cols.map(c => {
+      if (c === 'cohorts') return csvCell(cohorts)
+      if (c === 'tags') return csvCell(tags)
+      return csvCell(r[c])
+    })
+    lines.push(row.join(','))
+  }
+  const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// ─────── BULK ACTIONS + EXPORT ───────
+async function bulkUpdate(patch, mutator) {
+  if (selectedIds.size === 0) return
+  const ids = [...selectedIds]
+  // Apply optimistically
+  for (const id of ids) {
+    const lead = leads.find(l => l.id === id)
+    if (lead) mutator(lead)
+  }
+  populateTagFilters(); applyFilters(); updateTotals()
+  // Persist
+  const { error } = await sb.from('leads').update(patch).in('id', ids)
+  if (error) {
+    alert('Bulk update failed: ' + error.message + '\nReload to refresh state.')
+  }
+}
+
+document.getElementById('selectAll').addEventListener('change', (e) => {
+  if (e.target.checked) {
+    for (const l of filtered) selectedIds.add(l.id)
+  } else {
+    selectedIds.clear()
+  }
+  refreshSelectionUI()
+})
+
+document.getElementById('bulkClear').addEventListener('click', () => {
+  selectedIds.clear(); refreshSelectionUI()
+})
+
+document.getElementById('bulkQueue').addEventListener('click', () => {
+  const ids = [...selectedIds]
+  if (!confirm(`Queue ${ids.length} lead(s) for outreach?`)) return
+  bulkUpdate({ current_stage: 'queued' }, l => { l.current_stage = 'queued' })
+})
+
+document.getElementById('bulkStatus').addEventListener('change', (e) => {
+  const stage = e.target.value
+  e.target.value = ''
+  if (!stage) return
+  const ids = [...selectedIds]
+  if (!confirm(`Set ${ids.length} lead(s) to status "${stage}"?`)) return
+  bulkUpdate({ current_stage: stage }, l => { l.current_stage = stage })
+})
+
+document.getElementById('bulkTag').addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter') return
+  e.preventDefault()
+  const tag = e.target.value.trim().toLowerCase().replace(/^#/, '').replace(/\s+/g, '-')
+  if (!tag || selectedIds.size === 0) return
+  e.target.value = ''
+  const ids = [...selectedIds]
+  if (!confirm(`Add tag "#${tag}" to ${ids.length} lead(s)?`)) return
+  // Need to fetch+merge per lead since tags is an array
+  for (const id of ids) {
+    const l = leads.find(x => x.id === id)
+    if (!l) continue
+    const newTags = Array.from(new Set([...(l.tags || []), tag]))
+    l.tags = newTags
+    await sb.from('leads').update({ tags: newTags }).eq('id', id)
+  }
+  populateTagFilters(); applyFilters(); updateTotals()
+})
+
+document.getElementById('exportCsv').addEventListener('click', () => {
+  const rows = selectedIds.size > 0
+    ? filtered.filter(l => selectedIds.has(l.id))
+    : filtered
+  const stamp = new Date().toISOString().slice(0,10)
+  downloadCsv(rows, `lincoln-leads-${stamp}.csv`)
+})
 
 // ─────── BOOT ───────
 init()
