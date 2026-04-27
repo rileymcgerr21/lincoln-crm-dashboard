@@ -9,8 +9,7 @@
   body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
   .panel-enter { transform: translateX(100%); }
   .panel-active { transform: translateX(0); }
-  .skel { background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%); background-size: 200% 100%; animation: skel 1.2s infinite; }
-  @keyframes skel { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+  select { background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.5rem center; padding-right: 1.75rem; appearance: none; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
@@ -46,28 +45,62 @@
   <!-- Header -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
     <div class="max-w-screen-2xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-      <div class="flex items-center gap-3">
-        <h1 class="text-lg font-bold">Lincoln CRM</h1>
-        <span id="totals" class="text-sm text-slate-500"></span>
+      <div class="flex items-center gap-3 min-w-0">
+        <h1 class="text-lg font-bold whitespace-nowrap">Lincoln CRM</h1>
+        <span id="totals" class="text-sm text-slate-500 truncate"></span>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3 shrink-0">
         <span id="userEmail" class="text-sm text-slate-600 hidden sm:inline"></span>
         <button id="signOutBtn" class="text-sm text-slate-500 hover:text-slate-900">Sign out</button>
       </div>
     </div>
 
-    <!-- Filter bar -->
-    <div class="max-w-screen-2xl mx-auto px-4 pb-3 flex items-center gap-2 flex-wrap">
-      <button data-filter="all"      class="filter-chip px-3 py-1 rounded-full text-sm bg-slate-900 text-white">All <span class="opacity-60 ml-1" data-count="all"></span></button>
-      <button data-filter="severe"   class="filter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Severe 8+ <span class="opacity-60 ml-1" data-count="severe"></span></button>
-      <button data-filter="moderate" class="filter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Moderate 6+ <span class="opacity-60 ml-1" data-count="moderate"></span></button>
-      <button data-filter="oos"      class="filter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Out-of-state <span class="opacity-60 ml-1" data-count="oos"></span></button>
-      <button data-filter="phoned"   class="filter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Has phone <span class="opacity-60 ml-1" data-count="phoned"></span></button>
-      <button data-filter="entity"   class="filter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200">LLC/Trust <span class="opacity-60 ml-1" data-count="entity"></span></button>
+    <!-- Primary controls -->
+    <div class="max-w-screen-2xl mx-auto px-4 pb-2 flex items-center gap-3 flex-wrap text-sm">
+      <label class="flex items-center gap-2">
+        <span class="text-slate-500 font-medium">Cohort</span>
+        <select id="cohortSelect" class="border border-slate-300 rounded-lg px-2 py-1 bg-white">
+          <option value="all">All cohorts</option>
+        </select>
+      </label>
+      <label class="flex items-center gap-2">
+        <span class="text-slate-500 font-medium">Status</span>
+        <select id="stageSelect" class="border border-slate-300 rounded-lg px-2 py-1 bg-white">
+          <option value="all">All</option>
+          <option value="new">New</option>
+          <option value="queued">Queued</option>
+          <option value="sent">Sent (T1/T2/T3)</option>
+          <option value="replied">Replied</option>
+          <option value="engaged">Engaged</option>
+          <option value="closed">Closed/Skipped</option>
+        </select>
+      </label>
+      <label class="flex items-center gap-2">
+        <span class="text-slate-500 font-medium">Sort</span>
+        <select id="sortSelect" class="border border-slate-300 rounded-lg px-2 py-1 bg-white">
+          <option value="score">Score (high → low)</option>
+          <option value="score_asc">Score (low → high)</option>
+          <option value="oldest">Year built (oldest first)</option>
+          <option value="cheapest">Assessed value (low → high)</option>
+          <option value="priciest">Assessed value (high → low)</option>
+          <option value="recent">Recently updated</option>
+        </select>
+      </label>
       <div class="ml-auto">
         <input id="search" type="search" placeholder="Search owner or address…"
-               class="px-3 py-1 border border-slate-300 rounded-lg text-sm w-64 focus:ring-2 focus:ring-slate-900 focus:outline-none" />
+               class="px-3 py-1 border border-slate-300 rounded-lg w-64 focus:ring-2 focus:ring-slate-900 focus:outline-none" />
       </div>
+    </div>
+
+    <!-- Quick filter chips -->
+    <div class="max-w-screen-2xl mx-auto px-4 pb-3 flex items-center gap-2 flex-wrap">
+      <button data-quickfilter="all"      class="quickfilter-chip px-3 py-1 rounded-full text-sm bg-slate-900 text-white">All <span class="opacity-60 ml-1" data-count="all"></span></button>
+      <button data-quickfilter="severe"   class="quickfilter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Severe 8+ <span class="opacity-60 ml-1" data-count="severe"></span></button>
+      <button data-quickfilter="moderate" class="quickfilter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Moderate 6+ <span class="opacity-60 ml-1" data-count="moderate"></span></button>
+      <button data-quickfilter="oos"      class="quickfilter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Out-of-state <span class="opacity-60 ml-1" data-count="oos"></span></button>
+      <button data-quickfilter="phoned"   class="quickfilter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Has phone <span class="opacity-60 ml-1" data-count="phoned"></span></button>
+      <button data-quickfilter="entity"   class="quickfilter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200">LLC/Trust <span class="opacity-60 ml-1" data-count="entity"></span></button>
+      <span id="tagFilters" class="flex items-center gap-2 flex-wrap"></span>
     </div>
   </header>
 
@@ -94,10 +127,51 @@ const ALLOWED_EMAILS = ['rileymcgerr@gmail.com', 'danielbecher123@gmail.com']
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
 
+// Group raw enum stages into the simpler buckets the dashboard uses.
+const SENT_STAGES    = new Set(['t1_sent', 't2_sent', 't3_sent'])
+const CLOSED_STAGES  = new Set(['closed_won', 'closed_lost', 'not_interested', 'opted_out', 'bad_number', 'do_not_contact'])
+const ENGAGED_STAGES = new Set(['engaged', 'offer_made', 'under_contract'])
+
+const STAGE_BUCKET = (stage) => {
+  if (stage === 'new') return 'new'
+  if (stage === 'queued') return 'queued'
+  if (SENT_STAGES.has(stage)) return 'sent'
+  if (stage === 'replied') return 'replied'
+  if (ENGAGED_STAGES.has(stage)) return 'engaged'
+  if (CLOSED_STAGES.has(stage)) return 'closed'
+  return stage
+}
+
+const STAGE_STYLE = {
+  new:     { bg: 'bg-slate-200',  fg: 'text-slate-700',  label: 'New' },
+  queued:  { bg: 'bg-blue-100',   fg: 'text-blue-800',   label: 'Queued' },
+  sent:    { bg: 'bg-amber-100',  fg: 'text-amber-800',  label: 'Sent' },
+  replied: { bg: 'bg-purple-100', fg: 'text-purple-800', label: 'Replied' },
+  engaged: { bg: 'bg-green-100',  fg: 'text-green-800',  label: 'Engaged' },
+  closed:  { bg: 'bg-slate-300',  fg: 'text-slate-600',  label: 'Closed' },
+}
+
+const COHORT_LABEL = {
+  distressed_absentee: 'Distressed Absentee',
+  zillow_stale:        'Zillow Stale',
+  tax_delinquent:      'Tax Delinquent',
+  divorce_filing:      'Divorce',
+  code_violation:      'Code Violation',
+  probate_heir:        'Probate / Heir',
+  senior_long_held:    'Senior Long-held',
+  boomer_long_held:    'Boomer Long-held',
+  eviction_landlord:   'Eviction Landlord',
+  manual:              'Manual',
+}
+
 // ─────── STATE ───────
 let leads = []
 let filtered = []
-let currentFilter = 'all'
+let currentQuickFilter = 'all'
+let currentCohort = 'all'
+let currentStage = 'all'
+let currentSort = 'score'
+let activeTags = new Set()
 let searchTerm = ''
 let session = null
 
@@ -106,13 +180,10 @@ async function init() {
   const { data: { session: s } } = await sb.auth.getSession()
   session = s
   if (!session) return showLogin()
-
-  // Allowlist check
   if (!ALLOWED_EMAILS.includes(session.user.email)) {
     await sb.auth.signOut()
     return showLogin('That email is not on the allowlist.')
   }
-
   showApp()
   await loadLeads()
 }
@@ -140,24 +211,19 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   const email = document.getElementById('email').value.trim().toLowerCase()
   const btn = document.getElementById('loginBtn')
   const msg = document.getElementById('loginMsg')
-
   if (!ALLOWED_EMAILS.includes(email)) {
     msg.textContent = 'That email is not allowed to access this dashboard.'
     msg.className = 'text-sm mt-4 text-red-600'
     return
   }
-
-  btn.disabled = true
-  btn.textContent = 'Sending…'
+  btn.disabled = true; btn.textContent = 'Sending…'
   const { error } = await sb.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: window.location.origin + window.location.pathname }
   })
-  btn.disabled = false
-  btn.textContent = 'Send magic link'
+  btn.disabled = false; btn.textContent = 'Send magic link'
   if (error) {
-    msg.textContent = error.message
-    msg.className = 'text-sm mt-4 text-red-600'
+    msg.textContent = error.message; msg.className = 'text-sm mt-4 text-red-600'
   } else {
     msg.textContent = `Check your inbox at ${email} for the sign-in link.`
     msg.className = 'text-sm mt-4 text-green-700'
@@ -185,8 +251,6 @@ async function loadLeads() {
       lead_sources(source)
     `)
     .is('deleted_at', null)
-    .order('priority', { ascending: false })
-    .order('distress_score', { ascending: false, nullsFirst: false })
     .limit(2000)
 
   if (error) {
@@ -194,10 +258,38 @@ async function loadLeads() {
       `<div class="bg-red-50 text-red-700 p-4 rounded-lg">Couldn't load leads: ${escape(error.message)}</div>`
     return
   }
-
   leads = data || []
+  populateCohortDropdown()
+  populateTagFilters()
   applyFilters()
   updateTotals()
+}
+
+function populateCohortDropdown() {
+  const counts = {}
+  for (const l of leads) for (const s of (l.lead_sources || [])) counts[s.source] = (counts[s.source] || 0) + 1
+  const select = document.getElementById('cohortSelect')
+  select.innerHTML = `<option value="all">All cohorts (${leads.length})</option>` +
+    Object.entries(counts).sort((a,b) => b[1] - a[1])
+      .map(([src, n]) => `<option value="${escape(src)}">${escape(COHORT_LABEL[src] || src)} (${n})</option>`).join('')
+  select.value = currentCohort
+}
+
+function populateTagFilters() {
+  const counts = {}
+  for (const l of leads) for (const t of (l.tags || [])) counts[t] = (counts[t] || 0) + 1
+  const wrap = document.getElementById('tagFilters')
+  if (Object.keys(counts).length === 0) { wrap.innerHTML = ''; return }
+  wrap.innerHTML = `<span class="text-slate-400 text-xs ml-2">Tags:</span>` +
+    Object.entries(counts).sort((a,b) => b[1] - a[1]).map(([t, n]) => {
+      const on = activeTags.has(t)
+      return `<button data-tag="${escape(t)}" class="tag-chip px-2 py-0.5 rounded-full text-xs ${on ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}">#${escape(t)} <span class="opacity-60 ml-1">${n}</span></button>`
+    }).join('')
+  wrap.querySelectorAll('.tag-chip').forEach(b => b.addEventListener('click', () => {
+    const t = b.dataset.tag
+    if (activeTags.has(t)) activeTags.delete(t); else activeTags.add(t)
+    populateTagFilters(); applyFilters()
+  }))
 }
 
 function updateTotals() {
@@ -209,44 +301,72 @@ function updateTotals() {
     phoned:   leads.filter(l => l.primary_phone).length,
     entity:   leads.filter(l => l.owner_entity_name).length,
   }
-  const fresh = leads.filter(l => l.current_stage === 'new').length
+  const stageCounts = {}
+  for (const l of leads) {
+    const b = STAGE_BUCKET(l.current_stage)
+    stageCounts[b] = (stageCounts[b] || 0) + 1
+  }
   document.getElementById('totals').innerHTML =
     `<span class="font-semibold text-slate-900">${counts.all}</span> leads · ` +
     `<span class="text-red-600 font-medium">${counts.severe} severe</span> · ` +
-    `<span>${counts.phoned} phoned</span> · ` +
-    `<span>${fresh} new</span>`
-  // Populate chip counts
+    `<span>${stageCounts.queued || 0} queued</span> · ` +
+    `<span>${stageCounts.sent    || 0} sent</span> · ` +
+    `<span>${stageCounts.replied || 0} replied</span>`
   document.querySelectorAll('[data-count]').forEach(el => {
     const k = el.dataset.count
     el.textContent = counts[k] != null ? `(${counts[k]})` : ''
   })
 }
 
-// ─────── FILTERS + SEARCH ───────
+// ─────── FILTERS + SORT + SEARCH ───────
 function applyFilters() {
   filtered = leads.filter(l => {
-    if (currentFilter === 'severe'   && !(l.distress_score >= 8)) return false
-    if (currentFilter === 'moderate' && !(l.distress_score >= 6)) return false
-    if (currentFilter === 'oos'      && (l.mailing_state === 'NE' || !l.is_absentee)) return false
-    if (currentFilter === 'phoned'   && !l.primary_phone) return false
-    if (currentFilter === 'entity'   && !l.owner_entity_name) return false
+    if (currentCohort !== 'all') {
+      if (!(l.lead_sources || []).some(s => s.source === currentCohort)) return false
+    }
+    if (currentStage !== 'all') {
+      if (STAGE_BUCKET(l.current_stage) !== currentStage) return false
+    }
+    if (currentQuickFilter === 'severe'   && !(l.distress_score >= 8)) return false
+    if (currentQuickFilter === 'moderate' && !(l.distress_score >= 6)) return false
+    if (currentQuickFilter === 'oos'      && (l.mailing_state === 'NE' || !l.is_absentee)) return false
+    if (currentQuickFilter === 'phoned'   && !l.primary_phone) return false
+    if (currentQuickFilter === 'entity'   && !l.owner_entity_name) return false
+    if (activeTags.size > 0) {
+      const ts = new Set(l.tags || [])
+      for (const t of activeTags) if (!ts.has(t)) return false
+    }
     if (searchTerm) {
-      const hay = [l.owner_full_name, l.owner_entity_name, l.property_address, l.mailing_city, l.parcel_id_primary]
+      const hay = [l.owner_full_name, l.owner_entity_name, l.property_address, l.mailing_city, l.parcel_id_primary, ...(l.tags || [])]
         .filter(Boolean).join(' ').toLowerCase()
       if (!hay.includes(searchTerm)) return false
     }
     return true
   })
+  filtered.sort(SORT_FNS[currentSort] || SORT_FNS.score)
   renderList()
 }
 
-document.querySelectorAll('.filter-chip').forEach(btn => {
+const SORT_FNS = {
+  score:      (a, b) => (b.priority || 0) - (a.priority || 0) || (b.distress_score || 0) - (a.distress_score || 0),
+  score_asc:  (a, b) => (a.distress_score || 0) - (b.distress_score || 0) || (a.priority || 0) - (b.priority || 0),
+  oldest:     (a, b) => (a.year_built || 9999) - (b.year_built || 9999),
+  cheapest:   (a, b) => (a.assessed_value || Infinity) - (b.assessed_value || Infinity),
+  priciest:   (a, b) => (b.assessed_value || -1) - (a.assessed_value || -1),
+  recent:     (a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0),
+}
+
+document.getElementById('cohortSelect').addEventListener('change', e => { currentCohort = e.target.value; applyFilters() })
+document.getElementById('stageSelect').addEventListener('change',  e => { currentStage  = e.target.value; applyFilters() })
+document.getElementById('sortSelect').addEventListener('change',   e => { currentSort   = e.target.value; applyFilters() })
+
+document.querySelectorAll('.quickfilter-chip').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-chip').forEach(b => {
-      b.className = 'filter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200'
+    document.querySelectorAll('.quickfilter-chip').forEach(b => {
+      b.className = 'quickfilter-chip px-3 py-1 rounded-full text-sm bg-slate-100 text-slate-700 hover:bg-slate-200'
     })
-    btn.className = 'filter-chip px-3 py-1 rounded-full text-sm bg-slate-900 text-white'
-    currentFilter = btn.dataset.filter
+    btn.className = 'quickfilter-chip px-3 py-1 rounded-full text-sm bg-slate-900 text-white'
+    currentQuickFilter = btn.dataset.quickfilter
     applyFilters()
   })
 })
@@ -260,11 +380,8 @@ document.getElementById('search').addEventListener('input', (e) => {
 function renderList() {
   const container = document.getElementById('leadList')
   const empty = document.getElementById('emptyMsg')
-  if (filtered.length === 0) {
-    container.innerHTML = ''
-    empty.classList.remove('hidden')
-    return
-  }
+  container.innerHTML = ''
+  if (filtered.length === 0) { empty.classList.remove('hidden'); return }
   empty.classList.add('hidden')
   container.innerHTML = filtered.map(renderRow).join('')
   container.querySelectorAll('[data-id]').forEach(el => {
@@ -284,24 +401,28 @@ function renderRow(l) {
     : escape(l.owner_full_name || '(unknown)')
   const mail = l.is_absentee
     ? (l.mailing_state && l.mailing_state !== 'NE'
-        ? `<span class="text-red-600">📬 out: ${escape(l.mailing_city || '')}, ${escape(l.mailing_state)}</span>`
-        : `<span class="text-amber-600">📬 abs: ${escape(l.mailing_city || '')}, ${escape(l.mailing_state || '')}</span>`)
+        ? `<span class="text-red-600">out: ${escape(l.mailing_city || '')}, ${escape(l.mailing_state)}</span>`
+        : `<span class="text-amber-600">abs: ${escape(l.mailing_city || '')}, ${escape(l.mailing_state || '')}</span>`)
     : `<span class="text-slate-400">owner-occ</span>`
-  const phone = l.primary_phone ? `<span class="text-green-600">☎</span>` : `<span class="text-slate-300">·</span>`
-  const stage = l.current_stage !== 'new'
-    ? `<span class="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">${escape(l.current_stage)}</span>`
-    : ''
+  const phone = l.primary_phone ? `<span class="text-green-600">☎</span>` : `<span class="text-slate-300">no phone</span>`
+  const bucket = STAGE_BUCKET(l.current_stage)
+  const ss = STAGE_STYLE[bucket] || { bg: 'bg-slate-200', fg: 'text-slate-700', label: l.current_stage }
+  const stageBadge = `<span class="text-xs px-2 py-0.5 rounded-full font-medium ${ss.bg} ${ss.fg}">${ss.label}</span>`
+  const tags = (l.tags || []).slice(0, 3).map(t =>
+    `<span class="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">#${escape(t)}</span>`
+  ).join('')
 
   return `
-  <div data-id="${l.id}" class="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4 cursor-pointer hover:border-slate-400 transition">
-    <div class="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-slate-100">
-      ${l.photo_url ? `<img src="${escape(l.photo_url)}" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-cover" onerror="this.style.display='none'">` : ''}
+  <div data-id="${l.id}" class="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4 cursor-pointer hover:border-slate-400 hover:shadow-sm transition">
+    <div class="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center text-slate-300">
+      ${l.photo_url ? `<img src="${escape(l.photo_url)}" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-cover" onerror="this.style.display='none';this.parentNode.textContent='🏠'">` : '🏠'}
     </div>
     <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2 mb-1">
+      <div class="flex items-center gap-2 mb-1 flex-wrap">
         <span class="px-2 py-0.5 rounded-md text-xs font-bold ${scoreColor}">${score != null ? Number(score).toFixed(1) : '—'}</span>
         <span class="font-semibold truncate">${owner}</span>
-        ${stage}
+        ${stageBadge}
+        ${tags}
       </div>
       <div class="text-sm text-slate-700 truncate">${escape(l.property_address || '(no address)')}</div>
       <div class="text-xs text-slate-500 truncate mt-1">
@@ -322,31 +443,51 @@ window.closePanel = () => {
   setTimeout(() => { p.classList.add('hidden'); o.classList.add('hidden') }, 200)
 }
 
+const STAGE_TRANSITIONS = [
+  { stage: 'new',      label: 'New',      desc: 'Untouched, in pool' },
+  { stage: 'queued',   label: 'Queue for outreach', desc: 'Mark for buddy\'s bot to send next batch' },
+  { stage: 't1_sent',  label: 'Mark T1 sent', desc: 'First message went out' },
+  { stage: 'replied',  label: 'They replied', desc: 'Inbound response received' },
+  { stage: 'engaged',  label: 'Engaged',  desc: 'Active conversation' },
+  { stage: 'offer_made', label: 'Offer made', desc: 'We sent a number' },
+]
+const TERMINAL_STAGES = [
+  { stage: 'not_interested', label: 'Not interested', cls: 'bg-amber-50 hover:bg-amber-100 text-amber-800' },
+  { stage: 'do_not_contact', label: 'Do not contact', cls: 'bg-red-50 hover:bg-red-100 text-red-800' },
+  { stage: 'bad_number',     label: 'Bad number',     cls: 'bg-slate-100 hover:bg-slate-200 text-slate-700' },
+  { stage: 'closed_won',     label: 'Closed WON',     cls: 'bg-green-100 hover:bg-green-200 text-green-800' },
+  { stage: 'closed_lost',    label: 'Closed lost',    cls: 'bg-slate-100 hover:bg-slate-200 text-slate-700' },
+]
+
 function openPanel(id) {
   const l = leads.find(x => x.id === id)
   if (!l) return
-  const sources = (l.lead_sources || []).map(s => s.source).join(', ') || '—'
+  const sources = (l.lead_sources || []).map(s => COHORT_LABEL[s.source] || s.source).join(', ') || '—'
   const phoneRow = l.primary_phone
     ? `<div class="text-green-700 font-medium">☎ ${escape(l.primary_phone)}${l.secondary_phone ? ` · ${escape(l.secondary_phone)}` : ''}</div>`
     : `<div class="text-slate-400">No phone yet (skip-trace pending)</div>`
+  const ss = STAGE_STYLE[STAGE_BUCKET(l.current_stage)] || { bg: 'bg-slate-200', fg: 'text-slate-700', label: l.current_stage }
+
+  const tagsHtml = (l.tags || []).map(t =>
+    `<span class="text-xs px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 inline-flex items-center gap-1">#${escape(t)}<button data-removetag="${escape(t)}" class="ml-1 text-indigo-500 hover:text-indigo-900">×</button></span>`
+  ).join(' ') || `<span class="text-xs text-slate-400">No tags yet</span>`
 
   document.getElementById('panelContent').innerHTML = `
     <div class="flex items-start justify-between mb-4">
       <button onclick="closePanel()" class="text-slate-500 hover:text-slate-900 text-2xl leading-none">✕</button>
-      <div class="flex gap-2">
-        <a href="${escape(l.assessor_url || '#')}" target="_blank" rel="noopener" class="text-sm text-blue-600 hover:underline ${l.assessor_url ? '' : 'pointer-events-none opacity-30'}">Assessor →</a>
-      </div>
+      <a href="${escape(l.assessor_url || '#')}" target="_blank" rel="noopener" class="text-sm text-blue-600 hover:underline ${l.assessor_url ? '' : 'pointer-events-none opacity-30'}">Assessor →</a>
     </div>
 
-    ${l.photo_url ? `<img src="${escape(l.photo_url)}" referrerpolicy="no-referrer" class="w-full rounded-lg mb-4 bg-slate-100">` : ''}
+    ${l.photo_url ? `<img src="${escape(l.photo_url)}" referrerpolicy="no-referrer" class="w-full rounded-lg mb-4 bg-slate-100" onerror="this.style.display='none'">` : ''}
 
     <div class="mb-4">
-      <div class="flex items-center gap-2 mb-1">
+      <div class="flex items-center gap-2 mb-1 flex-wrap">
         <span class="px-2 py-0.5 rounded-md text-xs font-bold ${
           l.distress_score >= 8 ? 'bg-red-600 text-white' :
           l.distress_score >= 6 ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700'
         }">${l.distress_score != null ? Number(l.distress_score).toFixed(1) : '—'}</span>
         <h2 class="text-xl font-bold">${escape(l.owner_entity_name || l.owner_full_name || '(unknown)')}</h2>
+        <span class="text-xs px-2 py-0.5 rounded-full font-medium ${ss.bg} ${ss.fg}">${ss.label}</span>
       </div>
       <div class="text-slate-700">${escape(l.property_address || '')}</div>
       <div class="text-xs text-slate-400">parcel ${escape(l.parcel_id_primary)}</div>
@@ -355,17 +496,27 @@ function openPanel(id) {
     ${l.distress_notes ? `<div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">${escape(l.distress_notes)}</div>` : ''}
 
     <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-4">
-      <dt class="text-slate-500">Year built</dt>           <dd>${l.year_built || '—'}</dd>
-      <dt class="text-slate-500">Assessed value</dt>       <dd>${l.assessed_value ? '$' + l.assessed_value.toLocaleString() : '—'}</dd>
-      <dt class="text-slate-500">Mailing</dt>              <dd>${escape([l.mailing_address, l.mailing_city, l.mailing_state, l.mailing_zip].filter(Boolean).join(', ') || '—')}</dd>
-      <dt class="text-slate-500">Cohorts</dt>              <dd>${escape(sources)}</dd>
-      <dt class="text-slate-500">Stage</dt>                <dd>${escape(l.current_stage)}</dd>
-      <dt class="text-slate-500">Priority</dt>             <dd>${l.priority}</dd>
+      <dt class="text-slate-500">Year built</dt>      <dd>${l.year_built || '—'}</dd>
+      <dt class="text-slate-500">Assessed value</dt>  <dd>${l.assessed_value ? '$' + l.assessed_value.toLocaleString() : '—'}</dd>
+      <dt class="text-slate-500">Mailing</dt>         <dd>${escape([l.mailing_address, l.mailing_city, l.mailing_state, l.mailing_zip].filter(Boolean).join(', ') || '—')}</dd>
+      <dt class="text-slate-500">Cohorts</dt>         <dd>${escape(sources)}</dd>
+      <dt class="text-slate-500">Stage (raw)</dt>     <dd class="font-mono text-xs">${escape(l.current_stage)}</dd>
+      <dt class="text-slate-500">Priority</dt>        <dd>${l.priority}</dd>
     </dl>
 
     <div class="mb-4">
       <h3 class="text-xs font-semibold uppercase text-slate-500 mb-1">Phone</h3>
       ${phoneRow}
+    </div>
+
+    <div class="mb-4">
+      <h3 class="text-xs font-semibold uppercase text-slate-500 mb-2">Tags</h3>
+      <div class="flex items-center gap-1 flex-wrap mb-2" id="tagsList">${tagsHtml}</div>
+      <div class="flex gap-2">
+        <input id="newTag" type="text" placeholder="Add a tag (e.g. hot, callback-tue)"
+               class="flex-1 border border-slate-300 rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-slate-900 focus:outline-none" />
+        <button id="addTagBtn" class="text-sm bg-slate-900 text-white px-3 py-1 rounded-lg hover:bg-slate-800">+</button>
+      </div>
     </div>
 
     <div class="mb-4">
@@ -376,17 +527,34 @@ function openPanel(id) {
     </div>
 
     <div class="border-t border-slate-200 pt-4 mt-4">
-      <h3 class="text-xs font-semibold uppercase text-slate-500 mb-2">Actions</h3>
+      <h3 class="text-xs font-semibold uppercase text-slate-500 mb-2">Move to status</h3>
+      <div class="flex flex-wrap gap-2 mb-3">
+        ${STAGE_TRANSITIONS.map(s => `
+          <button class="stage-btn px-3 py-1 rounded-lg text-sm border ${
+            l.current_stage === s.stage ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-300 hover:bg-slate-100'
+          }" data-stage="${s.stage}" title="${s.desc}">${s.label}</button>
+        `).join('')}
+      </div>
+      <h3 class="text-xs font-semibold uppercase text-slate-500 mb-2">Close out</h3>
       <div class="flex flex-wrap gap-2">
-        <button class="action-btn px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm" data-action="bump">+ Priority 10</button>
-        <button class="action-btn px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm" data-action="drop">− Priority 10</button>
-        <button class="action-btn px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-sm" data-action="not_interested">Not interested</button>
-        <button class="action-btn px-3 py-1 bg-red-50 hover:bg-red-100 text-red-800 rounded-lg text-sm" data-action="do_not_contact">Do not contact</button>
-        <button class="action-btn px-3 py-1 bg-green-50 hover:bg-green-100 text-green-800 rounded-lg text-sm" data-action="reset">Reset to new</button>
+        ${TERMINAL_STAGES.map(s => `
+          <button class="stage-btn px-3 py-1 rounded-lg text-sm ${s.cls} ${
+            l.current_stage === s.stage ? 'ring-2 ring-offset-1 ring-slate-900' : ''
+          }" data-stage="${s.stage}">${s.label}</button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="border-t border-slate-200 pt-4 mt-4">
+      <h3 class="text-xs font-semibold uppercase text-slate-500 mb-2">Priority (${l.priority})</h3>
+      <div class="flex gap-2">
+        <button class="prio-btn px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm" data-delta="10">+10</button>
+        <button class="prio-btn px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm" data-delta="-10">−10</button>
       </div>
     </div>
   `
 
+  // Notes save
   document.getElementById('saveNotesBtn').addEventListener('click', async () => {
     const notes = document.getElementById('notesField').value
     const { error } = await sb.from('leads').update({ notes }).eq('id', id)
@@ -396,22 +564,50 @@ function openPanel(id) {
     s.classList.remove('hidden'); setTimeout(() => s.classList.add('hidden'), 2000)
   })
 
-  document.querySelectorAll('.action-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const action = btn.dataset.action
-      let patch = {}
-      if (action === 'bump') patch.priority = Math.min(100, (l.priority || 0) + 10)
-      if (action === 'drop') patch.priority = Math.max(0,   (l.priority || 0) - 10)
-      if (action === 'not_interested')  patch.current_stage = 'not_interested'
-      if (action === 'do_not_contact')  patch.current_stage = 'do_not_contact'
-      if (action === 'reset')           patch.current_stage = 'new'
-      const { error } = await sb.from('leads').update(patch).eq('id', id)
-      if (error) return alert('Update failed: ' + error.message)
-      Object.assign(l, patch)
-      // Refresh the row in the list
-      applyFilters(); updateTotals(); openPanel(id)
-    })
-  })
+  // Add tag
+  const addTag = async () => {
+    const input = document.getElementById('newTag')
+    const tag = input.value.trim().toLowerCase().replace(/^#/, '').replace(/\s+/g, '-')
+    if (!tag) return
+    const tags = Array.from(new Set([...(l.tags || []), tag]))
+    const { error } = await sb.from('leads').update({ tags }).eq('id', id)
+    if (error) return alert('Tag add failed: ' + error.message)
+    l.tags = tags
+    input.value = ''
+    populateTagFilters(); applyFilters(); updateTotals(); openPanel(id)
+  }
+  document.getElementById('addTagBtn').addEventListener('click', addTag)
+  document.getElementById('newTag').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } })
+
+  // Remove tag
+  document.querySelectorAll('[data-removetag]').forEach(b => b.addEventListener('click', async (e) => {
+    e.stopPropagation()
+    const tag = b.dataset.removetag
+    const tags = (l.tags || []).filter(t => t !== tag)
+    const { error } = await sb.from('leads').update({ tags }).eq('id', id)
+    if (error) return alert('Tag remove failed: ' + error.message)
+    l.tags = tags
+    populateTagFilters(); applyFilters(); updateTotals(); openPanel(id)
+  }))
+
+  // Stage transitions
+  document.querySelectorAll('.stage-btn').forEach(btn => btn.addEventListener('click', async () => {
+    const stage = btn.dataset.stage
+    const { error } = await sb.from('leads').update({ current_stage: stage }).eq('id', id)
+    if (error) return alert('Stage update failed: ' + error.message)
+    l.current_stage = stage
+    applyFilters(); updateTotals(); openPanel(id)
+  }))
+
+  // Priority
+  document.querySelectorAll('.prio-btn').forEach(btn => btn.addEventListener('click', async () => {
+    const delta = parseInt(btn.dataset.delta, 10)
+    const priority = Math.max(0, Math.min(100, (l.priority || 0) + delta))
+    const { error } = await sb.from('leads').update({ priority }).eq('id', id)
+    if (error) return alert('Priority update failed: ' + error.message)
+    l.priority = priority
+    applyFilters(); openPanel(id)
+  }))
 
   const o = document.getElementById('overlay')
   const p = document.getElementById('panel')
@@ -427,17 +623,13 @@ function escape(s) {
 
 // ─────── BOOT ───────
 init()
-// React to sign-in / sign-out WITHOUT reloading. (The previous version reloaded
-// on every state change, which created an infinite loop because the closure
-// `session` var resets to null on every load.)
 sb.auth.onAuthStateChange((event, s) => {
   if (event === 'SIGNED_IN' && s && !session) {
     session = s
     if (ALLOWED_EMAILS.includes(session.user.email)) { showApp(); loadLeads() }
     else { sb.auth.signOut().then(() => showLogin('That email is not on the allowlist.')) }
   } else if (event === 'SIGNED_OUT') {
-    session = null
-    showLogin()
+    session = null; showLogin()
   }
 })
 </script>
