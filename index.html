@@ -464,13 +464,13 @@ async function loadLeads() {
       is_in_blight_zone, is_in_tif_area, is_in_redevelopment, is_in_nrsa, is_in_lmi_tract,
       created_at, updated_at,
       lead_sources(source)
-    `).is('deleted_at', null).limit(2000),
-    sb.from('v_lead_worklist').select('id, deal_score_v2, deal_score_tier, deal_flags').limit(5000),
+    `).is('deleted_at', null).limit(15000),
+    sb.from('v_lead_worklist').select('id, deal_score_v2, deal_score_tier, deal_flags').limit(15000),
     sb.from('v_top_deals').select(
       'lead_id, arv_estimate, rehab_estimate, suggested_offer, ' +
       'owner_is_known_flipper, flipper_operator, is_tax_delinquent, is_out_of_state, is_pro_owner, ' +
       'owner_property_count, last_sale_year, tax_owed'
-    ).not('lead_id', 'is', null).limit(5000)
+    ).not('lead_id', 'is', null).limit(15000)
   ])
 
   if (leadsRes.error) {
