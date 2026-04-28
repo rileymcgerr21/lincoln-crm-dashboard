@@ -209,6 +209,12 @@
         <button data-quickfilter="elite"    class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-amber-500/30 to-pink-500/30 text-amber-200 border border-amber-500/40 hover:from-amber-500/40 hover:to-pink-500/40">⭐ Elite <span class="opacity-60 ml-1" data-count="elite"></span></button>
         <button data-quickfilter="high_confidence" class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20">High <span class="opacity-60 ml-1" data-count="high_confidence"></span></button>
         <button data-quickfilter="decent"   class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-300 border border-blue-500/30 hover:bg-blue-500/20">Decent <span class="opacity-60 ml-1" data-count="decent"></span></button>
+        <span class="text-slate-500 text-[10px] ml-2 uppercase tracking-wider font-semibold">Zone</span>
+        <button data-quickfilter="blight"   class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-300 border border-red-500/30 hover:bg-red-500/20" title="Inside a Lancaster County declared blight zone — TIF/abatement eligible">🏚 Blight <span class="opacity-60 ml-1" data-count="blight"></span></button>
+        <button data-quickfilter="redev"    class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20" title="Inside a redevelopment area">🏗 Redev <span class="opacity-60 ml-1" data-count="redev"></span></button>
+        <button data-quickfilter="nrsa"     class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/20" title="Neighborhood Revitalization Strategy Area">NRSA <span class="opacity-60 ml-1" data-count="nrsa"></span></button>
+        <button data-quickfilter="lmi"      class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-slate-700/40 text-slate-300 border border-slate-600/40 hover:bg-slate-700/60" title="Low/Moderate-Income census tract">LMI <span class="opacity-60 ml-1" data-count="lmi"></span></button>
+        <button data-quickfilter="tif"      class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20" title="Inside a Core TIF (Tax Increment Financing) area">TIF <span class="opacity-60 ml-1" data-count="tif"></span></button>
         <span id="tagFilters" class="flex items-center gap-1.5 flex-wrap"></span>
       </div>
 
@@ -455,6 +461,7 @@ async function loadLeads() {
       photo_url, assessor_url,
       current_stage, priority, notes, tags,
       next_action, next_action_due_at, sequence_name, sequence_step, sequence_started_at, last_action_at,
+      is_in_blight_zone, is_in_tif_area, is_in_redevelopment, is_in_nrsa, is_in_lmi_tract,
       created_at, updated_at,
       lead_sources(source)
     `).is('deleted_at', null).limit(2000),
@@ -553,6 +560,11 @@ function updateTotals() {
     elite:           leads.filter(l => l.deal?.score_tier === 'elite').length,
     high_confidence: leads.filter(l => l.deal?.score_tier === 'high_confidence').length,
     decent:          leads.filter(l => l.deal?.score_tier === 'decent').length,
+    blight:          leads.filter(l => l.is_in_blight_zone).length,
+    redev:           leads.filter(l => l.is_in_redevelopment).length,
+    nrsa:            leads.filter(l => l.is_in_nrsa).length,
+    lmi:             leads.filter(l => l.is_in_lmi_tract).length,
+    tif:             leads.filter(l => l.is_in_tif_area).length,
     overdue:         leads.filter(l => l.next_action && new Date(l.next_action_due_at) < new Date(Date.now() - 3600000)).length,
     due_now:         leads.filter(l => l.next_action && isDueNow(l.next_action_due_at)).length,
     call_due:        leads.filter(l => l.next_action === 'call' && isDueNow(l.next_action_due_at)).length,
@@ -608,6 +620,11 @@ function applyFilters() {
     if (currentQuickFilter === 'elite'             && l.deal?.score_tier !== 'elite') return false
     if (currentQuickFilter === 'high_confidence'   && l.deal?.score_tier !== 'high_confidence') return false
     if (currentQuickFilter === 'decent'            && l.deal?.score_tier !== 'decent') return false
+    if (currentQuickFilter === 'blight'            && !l.is_in_blight_zone) return false
+    if (currentQuickFilter === 'redev'             && !l.is_in_redevelopment) return false
+    if (currentQuickFilter === 'nrsa'              && !l.is_in_nrsa) return false
+    if (currentQuickFilter === 'lmi'               && !l.is_in_lmi_tract) return false
+    if (currentQuickFilter === 'tif'               && !l.is_in_tif_area) return false
     if (currentQuickFilter === 'overdue'    && (!l.next_action || new Date(l.next_action_due_at) >= new Date(Date.now() - 3600000))) return false
     if (currentQuickFilter === 'due_now'    && (!l.next_action || !isDueNow(l.next_action_due_at))) return false
     if (currentQuickFilter === 'call_due'   && (l.next_action !== 'call' || !isDueNow(l.next_action_due_at))) return false
@@ -898,6 +915,9 @@ function renderRow(l) {
         ${l.deal?.suggested_offer ? `<span class="text-emerald-400 font-semibold">→ offer $${Number(l.deal.suggested_offer).toLocaleString()}</span>` : ''}
         ${l.deal?.is_tax_delinquent ? `<span class="text-orange-400">⚠ tax-del</span>` : ''}
         ${l.deal?.owner_is_known_flipper ? `<span class="text-fuchsia-400">⚠ flipper-owned</span>` : ''}
+        ${l.is_in_blight_zone ? `<span class="text-red-300" title="Inside declared blight zone — TIF/abatement eligible">🏚 blight</span>` : ''}
+        ${l.is_in_tif_area ? `<span class="text-amber-300" title="Inside Core TIF area">⚙ TIF</span>` : ''}
+        ${l.is_in_redevelopment ? `<span class="text-emerald-300" title="Inside redevelopment area">🏗 redev</span>` : ''}
       </div>
     </div>
     <div class="shrink-0 flex flex-col gap-1 sm:flex-row items-center opacity-60 group-hover:opacity-100 transition">
