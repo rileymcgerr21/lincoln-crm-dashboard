@@ -167,9 +167,11 @@
         <label class="flex items-center gap-2">
           <span class="text-slate-400 font-medium text-xs uppercase tracking-wider">Sort</span>
           <select id="sortSelect" class="bg-ink-850 border border-ink-700 rounded-lg px-2 py-1 text-slate-200 focus:border-indigo-500 focus:outline-none">
-            <option value="score">Score (high → low)</option>
+            <option value="deal">Deal score (high → low)</option>
+            <option value="suggested_offer">Suggested offer ($)</option>
+            <option value="distress">Distress score (high → low)</option>
             <option value="stack">List stack (most cohorts first)</option>
-            <option value="score_asc">Score (low → high)</option>
+            <option value="distress_asc">Distress score (low → high)</option>
             <option value="oldest">Year built (oldest first)</option>
             <option value="cheapest">Assessed value (low → high)</option>
             <option value="priciest">Assessed value (high → low)</option>
@@ -183,7 +185,7 @@
       </div>
 
       <div class="flex items-center gap-1.5 flex-wrap">
-        <button data-quickfilter="all"      class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-600 text-white">All <span class="opacity-60 ml-1" data-count="all"></span></button>
+        <button data-quickfilter="all"      class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-600 text-white ring-2 ring-indigo-400 ring-offset-2 ring-offset-ink-900">All <span class="opacity-60 ml-1" data-count="all"></span></button>
         <button data-quickfilter="severe"   class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-ink-850 text-slate-300 hover:bg-ink-800 border border-ink-700">Severe 8+ <span class="opacity-60 ml-1" data-count="severe"></span></button>
         <button data-quickfilter="moderate" class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-ink-850 text-slate-300 hover:bg-ink-800 border border-ink-700">Moderate 6+ <span class="opacity-60 ml-1" data-count="moderate"></span></button>
         <button data-quickfilter="vacant"   class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-ink-850 text-slate-300 hover:bg-ink-800 border border-ink-700">Vacant <span class="opacity-60 ml-1" data-count="vacant"></span></button>
@@ -193,6 +195,10 @@
         <button data-quickfilter="phoned"   class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-ink-850 text-slate-300 hover:bg-ink-800 border border-ink-700">Has phone <span class="opacity-60 ml-1" data-count="phoned"></span></button>
         <button data-quickfilter="entity"   class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-ink-850 text-slate-300 hover:bg-ink-800 border border-ink-700">LLC/Trust <span class="opacity-60 ml-1" data-count="entity"></span></button>
         <button data-quickfilter="stacked"  class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-ink-850 text-slate-300 hover:bg-ink-800 border border-ink-700">Stacked <span class="opacity-60 ml-1" data-count="stacked"></span></button>
+        <span class="text-slate-500 text-[10px] ml-2 uppercase tracking-wider font-semibold">Tier</span>
+        <button data-quickfilter="elite"    class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-amber-500/30 to-pink-500/30 text-amber-200 border border-amber-500/40 hover:from-amber-500/40 hover:to-pink-500/40">⭐ Elite <span class="opacity-60 ml-1" data-count="elite"></span></button>
+        <button data-quickfilter="high_confidence" class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20">High <span class="opacity-60 ml-1" data-count="high_confidence"></span></button>
+        <button data-quickfilter="decent"   class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-300 border border-blue-500/30 hover:bg-blue-500/20">Decent <span class="opacity-60 ml-1" data-count="decent"></span></button>
         <span id="tagFilters" class="flex items-center gap-1.5 flex-wrap"></span>
       </div>
 
@@ -319,7 +325,7 @@ let filtered = []
 let currentQuickFilter = 'all'
 let currentCohort = 'all'
 let currentStage = 'all'
-let currentSort = 'score'
+let currentSort = 'deal'
 let activeTags = new Set()
 let searchTerm = ''
 let session = null
@@ -379,24 +385,42 @@ document.getElementById('signOutBtn').addEventListener('click', async () => {
 
 // ─────── DATA ───────
 async function loadLeads() {
-  const { data, error } = await sb.from('leads').select(`
-    id, owner_first_name, owner_last_name, owner_full_name, owner_entity_name,
-    parcel_id_primary, property_address, property_zip,
-    mailing_address, mailing_city, mailing_state, mailing_zip, is_absentee,
-    primary_phone, secondary_phone, email,
-    distress_score, distress_notes, year_built, assessed_value,
-    photo_url, assessor_url,
-    current_stage, priority, notes, tags,
-    created_at, updated_at,
-    lead_sources(source)
-  `).is('deleted_at', null).limit(2000)
+  // Pull leads + buddy's deal scores in parallel.
+  // v_top_deals.lead_id is already linked to leads.id, so we just merge by id.
+  const [leadsRes, dealsRes] = await Promise.all([
+    sb.from('leads').select(`
+      id, owner_first_name, owner_last_name, owner_full_name, owner_entity_name,
+      parcel_id_primary, property_address, property_zip,
+      mailing_address, mailing_city, mailing_state, mailing_zip, is_absentee,
+      primary_phone, secondary_phone, email,
+      distress_score, distress_notes, year_built, assessed_value,
+      photo_url, assessor_url,
+      current_stage, priority, notes, tags,
+      created_at, updated_at,
+      lead_sources(source)
+    `).is('deleted_at', null).limit(2000),
+    sb.from('v_top_deals').select(
+      'lead_id, score, score_tier, flags, arv_estimate, rehab_estimate, suggested_offer, ' +
+      'owner_is_known_flipper, flipper_operator, is_tax_delinquent, is_out_of_state, is_pro_owner, ' +
+      'owner_property_count, last_sale_year, tax_owed'
+    ).not('lead_id', 'is', null).limit(5000)
+  ])
 
-  if (error) {
+  if (leadsRes.error) {
     document.getElementById('leadList').innerHTML =
-      `<div class="bg-red-950/40 border border-red-900/50 text-red-300 p-4 rounded-lg">Couldn't load leads: ${escape(error.message)}</div>`
+      `<div class="bg-red-950/40 border border-red-900/50 text-red-300 p-4 rounded-lg">Couldn't load leads: ${escape(leadsRes.error.message)}</div>`
     return
   }
-  leads = data || []
+
+  // Merge deal scores into each lead
+  const dealsByLeadId = new Map()
+  if (dealsRes.data) for (const d of dealsRes.data) dealsByLeadId.set(d.lead_id, d)
+
+  leads = (leadsRes.data || []).map(l => ({
+    ...l,
+    deal: dealsByLeadId.get(l.id) || null,
+  }))
+
   populateCohortDropdown()
   populateTagFilters()
   renderSavedViews()
@@ -443,6 +467,9 @@ function updateTotals() {
     phoned:   leads.filter(l => l.primary_phone).length,
     entity:   leads.filter(l => l.owner_entity_name).length,
     stacked:  leads.filter(l => (l.lead_sources || []).length >= 2).length,
+    elite:           leads.filter(l => l.deal?.score_tier === 'elite').length,
+    high_confidence: leads.filter(l => l.deal?.score_tier === 'high_confidence').length,
+    decent:          leads.filter(l => l.deal?.score_tier === 'decent').length,
   }
   const stageCounts = {}
   for (const l of leads) {
@@ -484,6 +511,9 @@ function applyFilters() {
     if (currentQuickFilter === 'phoned'   && !l.primary_phone) return false
     if (currentQuickFilter === 'entity'   && !l.owner_entity_name) return false
     if (currentQuickFilter === 'stacked'  && (l.lead_sources || []).length < 2) return false
+    if (currentQuickFilter === 'elite'             && l.deal?.score_tier !== 'elite') return false
+    if (currentQuickFilter === 'high_confidence'   && l.deal?.score_tier !== 'high_confidence') return false
+    if (currentQuickFilter === 'decent'            && l.deal?.score_tier !== 'decent') return false
     if (activeTags.size > 0) {
       const ts = new Set(l.tags || [])
       for (const t of activeTags) if (!ts.has(t)) return false
@@ -499,13 +529,15 @@ function applyFilters() {
   renderList()
 }
 const SORT_FNS = {
-  score:      (a, b) => (b.priority || 0) - (a.priority || 0) || (b.distress_score || 0) - (a.distress_score || 0),
-  stack:      (a, b) => ((b.lead_sources || []).length - (a.lead_sources || []).length) || (b.distress_score || 0) - (a.distress_score || 0),
-  score_asc:  (a, b) => (a.distress_score || 0) - (b.distress_score || 0) || (a.priority || 0) - (b.priority || 0),
-  oldest:     (a, b) => (a.year_built || 9999) - (b.year_built || 9999),
-  cheapest:   (a, b) => (a.assessed_value || Infinity) - (b.assessed_value || Infinity),
-  priciest:   (a, b) => (b.assessed_value || -1) - (a.assessed_value || -1),
-  recent:     (a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0),
+  deal:            (a, b) => (b.deal?.score ?? -1) - (a.deal?.score ?? -1) || (b.distress_score || 0) - (a.distress_score || 0),
+  suggested_offer: (a, b) => (b.deal?.suggested_offer ?? -1) - (a.deal?.suggested_offer ?? -1),
+  distress:        (a, b) => (b.distress_score || 0) - (a.distress_score || 0) || (b.priority || 0) - (a.priority || 0),
+  distress_asc:    (a, b) => (a.distress_score || 0) - (b.distress_score || 0),
+  stack:           (a, b) => ((b.lead_sources || []).length - (a.lead_sources || []).length) || (b.distress_score || 0) - (a.distress_score || 0),
+  oldest:          (a, b) => (a.year_built || 9999) - (b.year_built || 9999),
+  cheapest:        (a, b) => (a.assessed_value || Infinity) - (b.assessed_value || Infinity),
+  priciest:        (a, b) => (b.assessed_value || -1) - (a.assessed_value || -1),
+  recent:          (a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0),
 }
 
 document.getElementById('cohortSelect').addEventListener('change', e => { currentCohort = e.target.value; applyFilters() })
@@ -517,11 +549,12 @@ document.querySelectorAll('.quickfilter-chip').forEach(btn => {
   btn.addEventListener('click', () => setQuickFilter(btn.dataset.quickfilter))
 })
 function setQuickFilter(k) {
+  // Use a ring to signal active so we don't trash each chip's intrinsic styling.
   document.querySelectorAll('.quickfilter-chip').forEach(b => {
-    b.className = 'quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-ink-850 text-slate-300 hover:bg-ink-800 border border-ink-700'
+    b.classList.remove('ring-2', 'ring-indigo-400', 'ring-offset-2', 'ring-offset-ink-900')
   })
   const target = document.querySelector(`.quickfilter-chip[data-quickfilter="${k}"]`)
-  if (target) target.className = 'quickfilter-chip px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-600 text-white'
+  if (target) target.classList.add('ring-2', 'ring-indigo-400', 'ring-offset-2', 'ring-offset-ink-900')
   currentQuickFilter = k
   applyFilters()
 }
@@ -664,6 +697,19 @@ function refreshSelectionUI() {
 }
 
 function renderRow(l) {
+  // Deal score badge (buddy's new scoring system, 0-100)
+  const dealScore = l.deal?.score
+  const tier = l.deal?.score_tier
+  const dealColor =
+    tier === 'elite'           ? 'bg-gradient-to-br from-amber-400 to-pink-500 text-white shadow-lg shadow-amber-500/40' :
+    tier === 'high_confidence' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' :
+    tier === 'decent'          ? 'bg-blue-500 text-white' :
+    'bg-slate-700 text-slate-300'
+  const dealBadge = dealScore != null
+    ? `<span class="px-2 py-0.5 rounded-md text-xs font-black ${dealColor}" title="Deal score · tier: ${escape(tier || '')}">${dealScore}</span>`
+    : `<span class="px-2 py-0.5 rounded-md text-xs font-medium bg-slate-800 text-slate-500" title="No deal score">—</span>`
+
+  // Distress score badge (vision-based, 0-10)
   const score = l.distress_score
   const scoreColor =
     score >= 8 ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' :
@@ -706,7 +752,8 @@ function renderRow(l) {
     </div>
     <div class="flex-1 min-w-0 py-0.5">
       <div class="flex items-center gap-2 mb-1 flex-wrap">
-        <span class="px-2 py-0.5 rounded-md text-xs font-black ${scoreColor}">${score != null ? Number(score).toFixed(1) : '—'}</span>
+        ${dealBadge}
+        <span class="px-2 py-0.5 rounded-md text-[10px] font-bold ${scoreColor}" title="Distress score (vision)">D${score != null ? Number(score).toFixed(1) : '—'}</span>
         <span class="font-bold text-base truncate">${owner}</span>
         ${stageBadge}
         ${stackDots}
@@ -718,6 +765,9 @@ function renderRow(l) {
         ${l.assessed_value ? `<span class="text-slate-400 font-semibold">$${l.assessed_value.toLocaleString()}</span>` : ''}
         <span>${mail}</span>
         <span>${phone}</span>
+        ${l.deal?.suggested_offer ? `<span class="text-emerald-400 font-semibold">→ offer $${Number(l.deal.suggested_offer).toLocaleString()}</span>` : ''}
+        ${l.deal?.is_tax_delinquent ? `<span class="text-orange-400">⚠ tax-del</span>` : ''}
+        ${l.deal?.owner_is_known_flipper ? `<span class="text-fuchsia-400">⚠ flipper-owned</span>` : ''}
       </div>
     </div>
     <div class="shrink-0 flex flex-col gap-1 sm:flex-row items-center opacity-60 group-hover:opacity-100 transition">
@@ -812,6 +862,8 @@ function openPanel(id) {
     </div>
 
     ${l.distress_notes ? `<div class="mb-5 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-200">${escape(l.distress_notes)}</div>` : ''}
+
+    ${renderDealSection(l)}
 
     <div class="mb-5">${SECTION('Lists / Cohorts')}<div class="flex flex-wrap gap-1.5">${stackList}</div></div>
 
@@ -926,6 +978,80 @@ function openPanel(id) {
   loadMessages(id)
 }
 
+function renderDealSection(l) {
+  if (!l.deal) {
+    return `<div class="mb-5 p-3 bg-ink-850 border border-ink-700 rounded-lg text-sm text-slate-500">No deal score yet for this property.</div>`
+  }
+  const d = l.deal
+  const tier = d.score_tier
+  const tierBadge = {
+    elite:           '<span class="px-2 py-0.5 rounded-md text-xs font-black bg-gradient-to-r from-amber-400 to-pink-500 text-white">⭐ ELITE</span>',
+    high_confidence: '<span class="px-2 py-0.5 rounded-md text-xs font-bold bg-emerald-500 text-white">HIGH CONFIDENCE</span>',
+    decent:          '<span class="px-2 py-0.5 rounded-md text-xs font-bold bg-blue-500 text-white">DECENT</span>',
+    low:             '<span class="px-2 py-0.5 rounded-md text-xs font-medium bg-slate-700 text-slate-300">LOW</span>',
+  }[tier] || ''
+
+  const flags = (d.flags || '').split(';').filter(Boolean).map(humanizeFlag)
+  const flagsHtml = flags.length
+    ? flags.map(f => `<span class="text-xs px-2 py-1 rounded-md ${f.cls}">${escape(f.label)}</span>`).join(' ')
+    : '<span class="text-xs text-slate-500">No flags</span>'
+
+  // Deal economics
+  const arv      = d.arv_estimate
+  const rehab    = d.rehab_estimate
+  const offer    = d.suggested_offer
+  const econHtml = (arv || rehab || offer)
+    ? `<div class="grid grid-cols-3 gap-2 mt-3">
+        <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
+          <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">ARV</div>
+          <div class="text-base font-bold text-slate-200 mt-0.5">${arv ? '$' + Number(arv).toLocaleString() : '—'}</div>
+        </div>
+        <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
+          <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Rehab</div>
+          <div class="text-base font-bold text-amber-300 mt-0.5">${rehab ? '$' + Number(rehab).toLocaleString() : '—'}</div>
+        </div>
+        <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2.5">
+          <div class="text-[9px] uppercase tracking-wider text-emerald-400 font-semibold">Suggested offer</div>
+          <div class="text-base font-black text-emerald-300 mt-0.5">${offer ? '$' + Number(offer).toLocaleString() : '—'}</div>
+        </div>
+      </div>` : ''
+
+  return `
+    <div class="mb-5 p-4 bg-gradient-to-br from-indigo-900/20 to-ink-850 border border-indigo-500/20 rounded-xl">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Deal Score</span>
+          <span class="text-3xl font-black text-white">${d.score ?? '—'}</span>
+          ${tierBadge}
+        </div>
+      </div>
+      <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Why it scores this way</div>
+      <div class="flex flex-wrap gap-1.5">${flagsHtml}</div>
+      ${econHtml}
+    </div>`
+}
+
+function humanizeFlag(f) {
+  // Parse buddy's flag strings into human labels with appropriate color
+  const oos = f.match(/^oos_([A-Z]{2})$/)
+  if (oos)                                 return { label: `Out-of-state owner (${oos[1]})`,        cls: 'bg-red-500/15 text-red-300 border border-red-500/30' }
+  if (f === 'absentee_in_state')           return { label: 'Absentee (in-state)',                   cls: 'bg-amber-500/15 text-amber-300 border border-amber-500/30' }
+  if (f === 'individual_owner')            return { label: 'Individual owner',                       cls: 'bg-slate-700/50 text-slate-300 border border-slate-600' }
+  if (f === 'estate_or_trust_owner')       return { label: 'Estate / trust owner',                   cls: 'bg-violet-500/15 text-violet-300 border border-violet-500/30' }
+  if (f === 'llc_owner')                   return { label: 'LLC owner',                              cls: 'bg-slate-700/50 text-slate-300 border border-slate-600' }
+  if (f === 'held_pre_2013')               return { label: 'Long-held (pre-2013)',                   cls: 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30' }
+  const taxd = f.match(/^tax_delinquent_\$(\d+)/)
+  if (taxd)                                return { label: `Tax delinquent ($${Number(taxd[1]).toLocaleString()})`, cls: 'bg-orange-500/15 text-orange-300 border border-orange-500/30' }
+  if (f === 'comp_buy_box')                return { label: 'Fits buy box',                           cls: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' }
+  const vintage = f.match(/^v_(\d{4})_(\d+)$/)
+  if (vintage)                             return { label: `Vintage ${vintage[1]}–${(parseInt(vintage[1]) + parseInt(vintage[2]))}`, cls: 'bg-blue-500/15 text-blue-300 border border-blue-500/30' }
+  if (f === 'multifamily')                 return { label: 'Multi-family',                           cls: 'bg-pink-500/15 text-pink-300 border border-pink-500/30' }
+  if (f === 'pro_owner')                   return { label: '⚠ Pro / wholesaler owned',               cls: 'bg-rose-500/15 text-rose-300 border border-rose-500/30' }
+  if (f === 'known_flipper')               return { label: '⚠ Known flipper',                        cls: 'bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30' }
+  // Fallback: show raw
+  return { label: f, cls: 'bg-slate-700/50 text-slate-300 border border-slate-600' }
+}
+
 async function loadMessages(leadId) {
   const wrap = document.getElementById('messagesList'); if (!wrap) return
   const { data, error } = await sb.from('touches')
@@ -959,6 +1085,7 @@ function csvCell(v) {
 function downloadCsv(rows, filename) {
   const cols = ['id','owner_full_name','owner_entity_name','property_address','parcel_id_primary',
     'mailing_address','mailing_city','mailing_state','mailing_zip',
+    'deal_score','deal_tier','arv_estimate','rehab_estimate','suggested_offer','deal_flags',
     'distress_score','year_built','assessed_value','primary_phone','secondary_phone',
     'current_stage','priority','tags','cohorts','distress_notes','assessor_url','photo_url']
   const lines = [cols.join(',')]
@@ -968,6 +1095,12 @@ function downloadCsv(rows, filename) {
     const row = cols.map(c => {
       if (c === 'cohorts') return csvCell(cohorts)
       if (c === 'tags') return csvCell(tags)
+      if (c === 'deal_score')      return csvCell(r.deal?.score)
+      if (c === 'deal_tier')       return csvCell(r.deal?.score_tier)
+      if (c === 'arv_estimate')    return csvCell(r.deal?.arv_estimate)
+      if (c === 'rehab_estimate')  return csvCell(r.deal?.rehab_estimate)
+      if (c === 'suggested_offer') return csvCell(r.deal?.suggested_offer)
+      if (c === 'deal_flags')      return csvCell(r.deal?.flags)
       return csvCell(r[c])
     })
     lines.push(row.join(','))
