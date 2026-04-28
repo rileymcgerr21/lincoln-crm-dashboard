@@ -819,6 +819,19 @@ function renderRow(l) {
     score >= 6 ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' :
     score >= 4 ? 'bg-slate-700 text-slate-200' :
     'bg-slate-800 text-slate-400'
+
+  // Portfolio-size badge — how many properties does this owner have?
+  // Drives call-script tier: 1 = direct, 2-4 = portfolio mention, 5-19 = landlord pitch, 20+ = institutional
+  const opc = l.deal?.owner_property_count
+  const portfolioBadge = opc == null
+    ? ''
+    : opc >= 20
+      ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-red-500/20 text-red-300 border border-red-500/40" title="${opc}-property portfolio — institutional, lead with portfolio-sale talk">🏚 ${opc}</span>`
+      : opc >= 5
+        ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30" title="Owner has ${opc} properties — pitch as portfolio repositioning">🏘 ${opc}</span>`
+        : opc >= 2
+          ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-700/50 text-slate-300 border border-slate-700" title="Owner has ${opc} properties">🏘 ${opc}</span>`
+          : `<span class="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-800 text-slate-500" title="Single-property owner">🏠 1</span>`
   const owner = l.owner_entity_name
     ? `<span class="text-slate-200"><span class="text-slate-500">🏢</span> ${escape(l.owner_entity_name)}</span>`
     : `<span class="text-white">${escape(l.owner_full_name || '(unknown)')}</span>`
@@ -869,6 +882,7 @@ function renderRow(l) {
       <div class="flex items-center gap-2 mb-1 flex-wrap">
         ${dealBadge}
         <span class="px-2 py-0.5 rounded-md text-[10px] font-bold ${scoreColor}" title="Distress score (vision)">D${score != null ? Number(score).toFixed(1) : '—'}</span>
+        ${portfolioBadge}
         <span class="font-bold text-base truncate">${owner}</span>
         ${stageBadge}
         ${actionBadge}
