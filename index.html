@@ -96,6 +96,10 @@
         <span class="text-base">📥</span> <span class="font-medium">Inbox</span>
         <span id="inboxBadge" class="ml-auto text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded-full font-semibold hidden"></span>
       </button>
+      <button class="nav-item relative w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-ink-850 flex items-center gap-2.5 text-slate-300" data-view="tasks">
+        <span class="text-base">📞</span> <span class="font-medium">Today's Tasks</span>
+        <span id="tasksBadge" class="ml-auto text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full font-semibold hidden"></span>
+      </button>
       <button class="nav-item relative w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-ink-850 flex items-center gap-2.5 text-slate-300" data-view="stats">
         <span class="text-base">📊</span> <span class="font-medium">Stats</span>
       </button>
@@ -168,6 +172,7 @@
           <span class="text-slate-400 font-medium text-xs uppercase tracking-wider">Sort</span>
           <select id="sortSelect" class="bg-ink-850 border border-ink-700 rounded-lg px-2 py-1 text-slate-200 focus:border-indigo-500 focus:outline-none">
             <option value="deal">Deal Finder v2 score (high → low)</option>
+            <option value="task_due">Task due (most urgent first)</option>
             <option value="suggested_offer">Suggested offer ($)</option>
             <option value="distress">Distress score (high → low)</option>
             <option value="stack">List stack (most cohorts first)</option>
@@ -195,6 +200,11 @@
         <button data-quickfilter="phoned"   class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-ink-850 text-slate-300 hover:bg-ink-800 border border-ink-700">Has phone <span class="opacity-60 ml-1" data-count="phoned"></span></button>
         <button data-quickfilter="entity"   class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-ink-850 text-slate-300 hover:bg-ink-800 border border-ink-700">LLC/Trust <span class="opacity-60 ml-1" data-count="entity"></span></button>
         <button data-quickfilter="stacked"  class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-ink-850 text-slate-300 hover:bg-ink-800 border border-ink-700">Stacked <span class="opacity-60 ml-1" data-count="stacked"></span></button>
+        <span class="text-slate-500 text-[10px] ml-2 uppercase tracking-wider font-semibold">Tasks</span>
+        <button data-quickfilter="overdue"   class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-300 border border-red-500/30 hover:bg-red-500/20">⚠ Overdue <span class="opacity-60 ml-1" data-count="overdue"></span></button>
+        <button data-quickfilter="due_now"   class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20">Due now <span class="opacity-60 ml-1" data-count="due_now"></span></button>
+        <button data-quickfilter="call_due"  class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20">📞 Call <span class="opacity-60 ml-1" data-count="call_due"></span></button>
+        <button data-quickfilter="letter_due" class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/20">📬 Letter <span class="opacity-60 ml-1" data-count="letter_due"></span></button>
         <span class="text-slate-500 text-[10px] ml-2 uppercase tracking-wider font-semibold">Tier</span>
         <button data-quickfilter="elite"    class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-amber-500/30 to-pink-500/30 text-amber-200 border border-amber-500/40 hover:from-amber-500/40 hover:to-pink-500/40">⭐ Elite <span class="opacity-60 ml-1" data-count="elite"></span></button>
         <button data-quickfilter="high_confidence" class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20">High <span class="opacity-60 ml-1" data-count="high_confidence"></span></button>
@@ -319,6 +329,50 @@ const COHORT_COLOR = {
 }
 const VACANT_RX = /vacant|abandoned|boarded|derelict|dilapidated|condemned/i
 
+// ─────── OUTREACH SEQUENCE ───────
+// Each step represents the state AFTER something happened.
+// next_action = what to do next when AT this step.
+// To advance: take next_action from current step, then move to step+1.
+const SEQUENCE_STEPS = [
+  { step: 0, label: 'Not yet contacted',   next_action: 'send_t1',     delay_hours: 0,   button: 'Mark T1 sent' },
+  { step: 1, label: 'T1 SMS sent',         next_action: 'call',        delay_hours: 24,  button: 'Mark called' },
+  { step: 2, label: '1st call attempted',  next_action: 'call',        delay_hours: 48,  button: 'Mark called' },
+  { step: 3, label: '2nd call attempted',  next_action: 'send_letter', delay_hours: 120, button: 'Mark letter sent' },
+  { step: 4, label: 'Letter sent',         next_action: 'send_t2',     delay_hours: 168, button: 'Mark T2 sent' },
+  { step: 5, label: 'T2 SMS sent',         next_action: 'call',        delay_hours: 72,  button: 'Mark called' },
+  { step: 6, label: '3rd call attempted',  next_action: 'send_t3',     delay_hours: 120, button: 'Mark T3 sent' },
+  { step: 7, label: 'T3 sent (final)',     next_action: null,          delay_hours: 0,   button: null },
+]
+const ACTION_LABEL = {
+  send_t1:     '📨 T1 SMS',
+  send_t2:     '📨 T2 SMS',
+  send_t3:     '📨 T3 SMS',
+  call:        '📞 Call',
+  send_letter: '📬 Letter',
+}
+const ACTION_CHANNEL = { send_t1: 'sms', send_t2: 'sms', send_t3: 'sms', call: 'call', send_letter: 'letter' }
+const ACTION_NEW_STAGE = { send_t1: 't1_sent', send_t2: 't2_sent', send_t3: 't3_sent' }
+
+function relativeTime(iso) {
+  if (!iso) return ''
+  const ms = new Date(iso) - new Date()
+  const abs = Math.abs(ms)
+  const mins = Math.round(abs / 60000)
+  const hrs = Math.round(abs / 3600000)
+  const days = Math.round(abs / 86400000)
+  let label
+  if (mins < 60) label = `${mins}m`
+  else if (hrs < 48) label = `${hrs}h`
+  else label = `${days}d`
+  return ms < 0 ? `overdue ${label}` : `in ${label}`
+}
+function isOverdue(iso) { return iso && new Date(iso) < new Date() }
+function isDueNow(iso) {
+  if (!iso) return false
+  const ms = new Date(iso) - new Date()
+  return ms <= 0 // Anything in the past or now is "due"
+}
+
 // ─────── STATE ───────
 let leads = []
 let filtered = []
@@ -400,6 +454,7 @@ async function loadLeads() {
       distress_score, distress_notes, year_built, assessed_value,
       photo_url, assessor_url,
       current_stage, priority, notes, tags,
+      next_action, next_action_due_at, sequence_name, sequence_step, sequence_started_at, last_action_at,
       created_at, updated_at,
       lead_sources(source)
     `).is('deleted_at', null).limit(2000),
@@ -498,6 +553,10 @@ function updateTotals() {
     elite:           leads.filter(l => l.deal?.score_tier === 'elite').length,
     high_confidence: leads.filter(l => l.deal?.score_tier === 'high_confidence').length,
     decent:          leads.filter(l => l.deal?.score_tier === 'decent').length,
+    overdue:         leads.filter(l => l.next_action && new Date(l.next_action_due_at) < new Date(Date.now() - 3600000)).length,
+    due_now:         leads.filter(l => l.next_action && isDueNow(l.next_action_due_at)).length,
+    call_due:        leads.filter(l => l.next_action === 'call' && isDueNow(l.next_action_due_at)).length,
+    letter_due:      leads.filter(l => l.next_action === 'send_letter' && isDueNow(l.next_action_due_at)).length,
   }
   const stageCounts = {}
   for (const l of leads) {
@@ -514,6 +573,12 @@ function updateTotals() {
   const replied = stageCounts.replied || 0
   if (replied > 0) { inboxBadge.textContent = replied; inboxBadge.classList.remove('hidden') }
   else inboxBadge.classList.add('hidden')
+
+  // Tasks badge in sidebar
+  const tasksBadge = document.getElementById('tasksBadge')
+  const dueCount = counts.due_now
+  if (dueCount > 0) { tasksBadge.textContent = dueCount; tasksBadge.classList.remove('hidden') }
+  else tasksBadge.classList.add('hidden')
   document.querySelectorAll('[data-count]').forEach(el => {
     const k = el.dataset.count
     el.textContent = counts[k] != null ? `(${counts[k]})` : ''
@@ -524,6 +589,7 @@ function updateTotals() {
 function applyFilters() {
   filtered = leads.filter(l => {
     if (currentView === 'inbox' && STAGE_BUCKET(l.current_stage) !== 'replied') return false
+    if (currentView === 'tasks' && (!l.next_action || !isDueNow(l.next_action_due_at))) return false
     if (currentCohort !== 'all') {
       if (!(l.lead_sources || []).some(s => s.source === currentCohort)) return false
     }
@@ -542,6 +608,10 @@ function applyFilters() {
     if (currentQuickFilter === 'elite'             && l.deal?.score_tier !== 'elite') return false
     if (currentQuickFilter === 'high_confidence'   && l.deal?.score_tier !== 'high_confidence') return false
     if (currentQuickFilter === 'decent'            && l.deal?.score_tier !== 'decent') return false
+    if (currentQuickFilter === 'overdue'    && (!l.next_action || new Date(l.next_action_due_at) >= new Date(Date.now() - 3600000))) return false
+    if (currentQuickFilter === 'due_now'    && (!l.next_action || !isDueNow(l.next_action_due_at))) return false
+    if (currentQuickFilter === 'call_due'   && (l.next_action !== 'call' || !isDueNow(l.next_action_due_at))) return false
+    if (currentQuickFilter === 'letter_due' && (l.next_action !== 'send_letter' || !isDueNow(l.next_action_due_at))) return false
     if (activeTags.size > 0) {
       const ts = new Set(l.tags || [])
       for (const t of activeTags) if (!ts.has(t)) return false
@@ -566,6 +636,11 @@ const SORT_FNS = {
   cheapest:        (a, b) => (a.assessed_value || Infinity) - (b.assessed_value || Infinity),
   priciest:        (a, b) => (b.assessed_value || -1) - (a.assessed_value || -1),
   recent:          (a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0),
+  task_due:        (a, b) => {
+    const ad = a.next_action_due_at ? new Date(a.next_action_due_at).getTime() : Infinity
+    const bd = b.next_action_due_at ? new Date(b.next_action_due_at).getTime() : Infinity
+    return ad - bd
+  },
 }
 
 document.getElementById('cohortSelect').addEventListener('change', e => { currentCohort = e.target.value; applyFilters() })
@@ -770,6 +845,18 @@ function renderRow(l) {
     `<span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-medium">#${escape(t)}</span>`
   ).join('')
 
+  // Next-action badge — what to do next, when it's due
+  let actionBadge = ''
+  if (l.next_action) {
+    const overdue = isOverdue(l.next_action_due_at)
+    const dueNow = isDueNow(l.next_action_due_at)
+    const cls = overdue
+      ? 'bg-red-500/15 text-red-300 border border-red-500/40'
+      : dueNow ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40'
+      : 'bg-slate-700/40 text-slate-400 border border-slate-700'
+    actionBadge = `<span class="text-[10px] px-1.5 py-0.5 rounded font-semibold ${cls}" title="Next action">${escape(ACTION_LABEL[l.next_action] || l.next_action)} · ${relativeTime(l.next_action_due_at)}</span>`
+  }
+
   return `
   <div data-id="${l.id}" class="group bg-ink-900 border border-ink-800 rounded-xl p-3 flex items-stretch gap-3 cursor-pointer hover:border-ink-600 hover:bg-ink-850 transition shadow-sm">
     <div class="flex items-center">
@@ -784,6 +871,7 @@ function renderRow(l) {
         <span class="px-2 py-0.5 rounded-md text-[10px] font-bold ${scoreColor}" title="Distress score (vision)">D${score != null ? Number(score).toFixed(1) : '—'}</span>
         <span class="font-bold text-base truncate">${owner}</span>
         ${stageBadge}
+        ${actionBadge}
         ${stackDots}
         ${tags}
       </div>
@@ -812,8 +900,18 @@ function renderRow(l) {
 async function handleRowAction(action, id) {
   const l = leads.find(x => x.id === id); if (!l) return
   if (action === 'queue') {
-    l.current_stage = 'queued'
-    await sb.from('leads').update({ current_stage: 'queued' }).eq('id', id)
+    // Inline Queue now also starts the sequence — sets next_action='send_t1' so buddy's bot picks it up.
+    const patch = {
+      current_stage: 'queued',
+      sequence_name: l.sequence_name || 'standard_4_step',
+      sequence_step: 0,
+      sequence_started_at: new Date().toISOString(),
+      next_action: 'send_t1',
+      next_action_due_at: new Date().toISOString(),
+      last_action_at: new Date().toISOString(),
+    }
+    Object.assign(l, patch)
+    await sb.from('leads').update(patch).eq('id', id)
   } else if (action === 'hot') {
     const tags = Array.from(new Set([...(l.tags || []), 'hot']))
     l.tags = tags
@@ -890,6 +988,8 @@ function openPanel(id) {
     </div>
 
     ${l.distress_notes ? `<div class="mb-5 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-200">${escape(l.distress_notes)}</div>` : ''}
+
+    ${renderSequenceSection(l)}
 
     ${renderDealSection(l)}
 
@@ -998,12 +1098,141 @@ function openPanel(id) {
     applyFilters(); openPanel(id)
   }))
 
+  // Sequence buttons
+  const startBtn = document.getElementById('seqStartBtn')
+  if (startBtn) startBtn.addEventListener('click', () => startSequence(id))
+  const advBtn = document.getElementById('seqAdvanceBtn')
+  if (advBtn) advBtn.addEventListener('click', () => advanceSequence(id))
+  const skipBtn = document.getElementById('seqSkipBtn')
+  if (skipBtn) skipBtn.addEventListener('click', () => {
+    if (!confirm('Skip this step? It will advance the sequence as if the action were taken.')) return
+    advanceSequence(id, { skipped: true })
+  })
+
   const o = document.getElementById('overlay')
   const p = document.getElementById('panel')
   o.classList.remove('hidden'); p.classList.remove('hidden')
   requestAnimationFrame(() => { p.classList.remove('panel-enter'); p.classList.add('panel-active') })
 
   loadMessages(id)
+}
+
+function renderSequenceSection(l) {
+  const step = l.sequence_step || 0
+  const cur = SEQUENCE_STEPS[step] || SEQUENCE_STEPS[0]
+  const dueText = l.next_action_due_at
+    ? `<span class="${isOverdue(l.next_action_due_at) ? 'text-red-300 font-semibold' : 'text-amber-300'}">${escape(relativeTime(l.next_action_due_at))}</span>`
+    : '<span class="text-slate-500">no due date</span>'
+
+  const timeline = SEQUENCE_STEPS.map((s, i) => {
+    const done = i < step
+    const current = i === step
+    const dotCls = done ? 'bg-emerald-500' : current ? 'bg-amber-400 ring-2 ring-amber-400/30' : 'bg-slate-700'
+    const textCls = done ? 'text-slate-300' : current ? 'text-white font-semibold' : 'text-slate-600'
+    return `
+      <div class="flex items-center gap-2.5 py-1">
+        <span class="w-2.5 h-2.5 rounded-full ${dotCls}"></span>
+        <span class="text-xs ${textCls}">${escape(s.label)}</span>
+        ${current && s.next_action ? `<span class="ml-auto text-[10px] text-slate-500">→ ${escape(ACTION_LABEL[s.next_action] || s.next_action)}</span>` : ''}
+      </div>`
+  }).join('')
+
+  // Action area
+  let actionArea = ''
+  if (cur.next_action) {
+    actionArea = `
+      <div class="mt-3 p-3 bg-ink-950/50 border border-ink-700 rounded-lg">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div class="text-sm">
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Pending action</div>
+            <div class="font-semibold text-white">${escape(ACTION_LABEL[cur.next_action] || cur.next_action)}</div>
+            <div class="text-xs">${dueText}</div>
+          </div>
+          <div class="flex gap-2">
+            ${step === 0
+              ? `<button id="seqStartBtn" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">Start sequence</button>`
+              : `<button id="seqAdvanceBtn" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium">${escape(cur.button)}</button>`
+            }
+            <button id="seqSkipBtn" class="px-3 py-1.5 bg-ink-850 hover:bg-ink-800 border border-ink-700 text-slate-300 rounded-lg text-sm">Skip step</button>
+          </div>
+        </div>
+      </div>`
+  } else {
+    actionArea = `<div class="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-sm text-emerald-300">✓ Sequence complete</div>`
+  }
+
+  return `
+    <div class="mb-5 p-4 bg-gradient-to-br from-amber-900/15 to-ink-850 border border-amber-500/20 rounded-xl">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-amber-300">Outreach Sequence</span>
+        <span class="text-[10px] text-slate-500">${escape(l.sequence_name || 'standard_4_step')} · step ${step}/${SEQUENCE_STEPS.length - 1}</span>
+      </div>
+      <div class="space-y-0">${timeline}</div>
+      ${actionArea}
+    </div>`
+}
+
+async function startSequence(leadId) {
+  const lead = leads.find(x => x.id === leadId); if (!lead) return
+  const patch = {
+    sequence_name: 'standard_4_step',
+    sequence_step: 0,
+    sequence_started_at: new Date().toISOString(),
+    next_action: 'send_t1',
+    next_action_due_at: new Date().toISOString(), // immediately ready for buddy's bot
+    current_stage: 'queued',
+    last_action_at: new Date().toISOString(),
+  }
+  const { error } = await sb.from('leads').update(patch).eq('id', leadId)
+  if (error) return alert('Failed to start sequence: ' + error.message)
+  Object.assign(lead, patch)
+  applyFilters(); updateTotals(); openPanel(leadId)
+}
+
+async function advanceSequence(leadId, opts = {}) {
+  const lead = leads.find(x => x.id === leadId); if (!lead) return
+  const step = lead.sequence_step || 0
+  const cur = SEQUENCE_STEPS[step]
+  if (!cur || !cur.next_action) return
+
+  // 1) Log the completed action as a touch row (so it appears in conversation history).
+  // The trigger we installed earlier won't fire because direction='outbound', not 'inbound'.
+  const channel = ACTION_CHANNEL[cur.next_action] || 'sms'
+  const body = opts.skipped
+    ? `(${cur.next_action} step skipped)`
+    : channel === 'call'   ? '(call attempted)'
+    : channel === 'letter' ? '(letter sent)'
+    : `(${cur.next_action} marked sent — log message body when bot wires up)`
+  await sb.from('touches').insert({
+    lead_id: leadId,
+    direction: 'outbound',
+    channel,
+    body,
+    status: 'sent',
+    sent_at: new Date().toISOString(),
+    sequence_step: step,
+    drafted_by: session?.user?.email || 'dashboard',
+  })
+
+  // 2) Advance to step+1.
+  const nextStep = step + 1
+  const nextDef = SEQUENCE_STEPS[nextStep] || SEQUENCE_STEPS[SEQUENCE_STEPS.length - 1]
+  const newDue = nextDef.next_action
+    ? new Date(Date.now() + nextDef.delay_hours * 3600 * 1000).toISOString()
+    : null
+  const newStage = ACTION_NEW_STAGE[cur.next_action] || lead.current_stage
+
+  const patch = {
+    sequence_step: nextStep,
+    next_action: nextDef.next_action,
+    next_action_due_at: newDue,
+    last_action_at: new Date().toISOString(),
+    current_stage: newStage,
+  }
+  const { error } = await sb.from('leads').update(patch).eq('id', leadId)
+  if (error) return alert('Failed to advance: ' + error.message)
+  Object.assign(lead, patch)
+  applyFilters(); updateTotals(); openPanel(leadId)
 }
 
 function renderDealSection(l) {
