@@ -167,7 +167,7 @@
         <label class="flex items-center gap-2">
           <span class="text-slate-400 font-medium text-xs uppercase tracking-wider">Sort</span>
           <select id="sortSelect" class="bg-ink-850 border border-ink-700 rounded-lg px-2 py-1 text-slate-200 focus:border-indigo-500 focus:outline-none">
-            <option value="deal">Deal score (high → low)</option>
+            <option value="deal">Deal Finder v2 score (high → low)</option>
             <option value="suggested_offer">Suggested offer ($)</option>
             <option value="distress">Distress score (high → low)</option>
             <option value="stack">List stack (most cohorts first)</option>
@@ -385,9 +385,13 @@ document.getElementById('signOutBtn').addEventListener('click', async () => {
 
 // ─────── DATA ───────
 async function loadLeads() {
-  // Pull leads + buddy's deal scores in parallel.
-  // v_top_deals.lead_id is already linked to leads.id, so we just merge by id.
-  const [leadsRes, dealsRes] = await Promise.all([
+  // Three parallel queries:
+  //   1. leads — operational fields (notes, tags, mailing, etc.)
+  //   2. v_lead_worklist — buddy's deal_score_v2 + tier + flags (primary score source)
+  //   3. v_top_deals — ARV / rehab / suggested_offer + extra flag booleans
+  // We merge by lead id. v_lead_worklist is the source of truth for the score
+  // so when buddy updates v2, our display and sort move with it automatically.
+  const [leadsRes, worklistRes, dealsRes] = await Promise.all([
     sb.from('leads').select(`
       id, owner_first_name, owner_last_name, owner_full_name, owner_entity_name,
       parcel_id_primary, property_address, property_zip,
@@ -399,8 +403,9 @@ async function loadLeads() {
       created_at, updated_at,
       lead_sources(source)
     `).is('deleted_at', null).limit(2000),
+    sb.from('v_lead_worklist').select('id, deal_score_v2, deal_score_tier, deal_flags').limit(5000),
     sb.from('v_top_deals').select(
-      'lead_id, score, score_tier, flags, arv_estimate, rehab_estimate, suggested_offer, ' +
+      'lead_id, arv_estimate, rehab_estimate, suggested_offer, ' +
       'owner_is_known_flipper, flipper_operator, is_tax_delinquent, is_out_of_state, is_pro_owner, ' +
       'owner_property_count, last_sale_year, tax_owed'
     ).not('lead_id', 'is', null).limit(5000)
@@ -412,14 +417,37 @@ async function loadLeads() {
     return
   }
 
-  // Merge deal scores into each lead
-  const dealsByLeadId = new Map()
-  if (dealsRes.data) for (const d of dealsRes.data) dealsByLeadId.set(d.lead_id, d)
+  // Index the auxiliary data by lead id
+  const v2ById = new Map()
+  if (worklistRes.data) for (const w of worklistRes.data) v2ById.set(w.id, w)
+  const econById = new Map()
+  if (dealsRes.data) for (const d of dealsRes.data) econById.set(d.lead_id, d)
 
-  leads = (leadsRes.data || []).map(l => ({
-    ...l,
-    deal: dealsByLeadId.get(l.id) || null,
-  }))
+  leads = (leadsRes.data || []).map(l => {
+    const v2 = v2ById.get(l.id)
+    const econ = econById.get(l.id)
+    return {
+      ...l,
+      // `deal` is the unified shape the rest of the app uses.
+      // Score / tier / flags come from v_lead_worklist (v2). Economics come from v_top_deals.
+      deal: (v2 || econ) ? {
+        score:                  v2?.deal_score_v2 ?? null,
+        score_tier:             v2?.deal_score_tier ?? null,
+        flags:                  v2?.deal_flags ?? null,
+        arv_estimate:           econ?.arv_estimate ?? null,
+        rehab_estimate:         econ?.rehab_estimate ?? null,
+        suggested_offer:        econ?.suggested_offer ?? null,
+        owner_is_known_flipper: econ?.owner_is_known_flipper ?? null,
+        flipper_operator:       econ?.flipper_operator ?? null,
+        is_tax_delinquent:      econ?.is_tax_delinquent ?? null,
+        is_out_of_state:        econ?.is_out_of_state ?? null,
+        is_pro_owner:           econ?.is_pro_owner ?? null,
+        owner_property_count:   econ?.owner_property_count ?? null,
+        last_sale_year:         econ?.last_sale_year ?? null,
+        tax_owed:               econ?.tax_owed ?? null,
+      } : null,
+    }
+  })
 
   populateCohortDropdown()
   populateTagFilters()
