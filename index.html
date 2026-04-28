@@ -1211,15 +1211,30 @@ function openPanel(id) {
 // before placing a call. Lets you spot a 22-property landlord and pitch
 // portfolio sale instead of a single-property buy.
 async function loadOwnerPortfolio(l) {
-  const ownerName = l.owner_entity_name || l.owner_full_name
-  if (!ownerName) return
-
-  const { data: portfolio, error } = await sb
-    .from('properties')
+  // Build a query to find this owner's other properties.
+  // Properties store owner names as 'LAST, FIRST [...]' (e.g. 'STACY, ANGELA R REVOCABLE TRUST').
+  // Leads have owner_entity_name for LLCs/trusts (exact match works), and
+  // owner_first_name + owner_last_name for individuals (need prefix match).
+  let q = sb.from('properties')
     .select('qref, parcel_id, address, primary_photo_url, current_assessed_val, res_year_built')
-    .eq('current_owner', ownerName)
     .order('current_assessed_val', { ascending: false, nullsFirst: false })
     .limit(500)
+
+  if (l.owner_entity_name) {
+    // Entity (LLC, INC, etc.) — names match exactly between leads and properties
+    q = q.eq('current_owner', l.owner_entity_name)
+  } else if (l.owner_last_name && l.owner_first_name) {
+    // Individual — match 'LAST, FIRST%' prefix in property's current_owner
+    const pattern = `${l.owner_last_name}, ${l.owner_first_name}%`
+    q = q.ilike('current_owner', pattern)
+  } else if (l.owner_full_name) {
+    // Last-resort fallback — try the full_name as exact (rarely works for individuals)
+    q = q.eq('current_owner', l.owner_full_name)
+  } else {
+    return
+  }
+
+  const { data: portfolio, error } = await q
   if (error || !portfolio || portfolio.length <= 1) return
 
   // Find the currently-displayed property in the portfolio (match by parcel_id)
