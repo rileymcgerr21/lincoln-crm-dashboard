@@ -1006,7 +1006,23 @@ function openPanel(id) {
          class="text-sm text-indigo-400 hover:text-indigo-300 ${l.assessor_url ? '' : 'pointer-events-none opacity-30'}">Assessor record →</a>
     </div>
 
-    ${l.photo_url ? `<div class="rounded-xl overflow-hidden mb-5 photo-fallback aspect-[16/10] flex items-center justify-center text-slate-700 text-5xl"><img src="${escape(l.photo_url)}" referrerpolicy="no-referrer" class="w-full h-full object-cover" onerror="this.style.display='none';this.parentNode.textContent='🏚'"></div>` : ''}
+    <div class="mb-5">
+      <div id="portfolioPhotoWrap" class="rounded-xl overflow-hidden photo-fallback aspect-[16/10] flex items-center justify-center text-slate-700 text-5xl bg-ink-950">
+        ${l.photo_url ? `<img id="portfolioPhoto" src="${escape(l.photo_url)}" referrerpolicy="no-referrer" class="w-full h-full object-cover" onerror="this.style.display='none';this.parentNode.classList.add('text-slate-700');this.parentNode.textContent='🏚'">` : '<span id="portfolioPhoto">🏚</span>'}
+      </div>
+      <div id="portfolioNav" class="hidden mt-2 flex items-center gap-2 text-sm">
+        <button id="portfolioPrev" class="px-3 py-1.5 bg-ink-850 hover:bg-ink-800 border border-ink-700 rounded-lg text-slate-300 transition" title="Previous property by this owner">←</button>
+        <div class="flex-1 text-center min-w-0">
+          <div class="text-slate-300 text-xs truncate" id="portfolioCurrentAddr">${escape(l.property_address || '')}</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">
+            Property <span id="portfolioIdx" class="text-slate-300 font-semibold">1</span> of <span id="portfolioTotal" class="text-slate-300 font-semibold">1</span> by this owner
+            · <span id="portfolioAssessedYB" class="text-slate-500"></span>
+            · <a id="portfolioAssessorLink" target="_blank" rel="noopener" href="${escape(l.assessor_url || '#')}" class="text-indigo-400 hover:text-indigo-300">assessor →</a>
+          </div>
+        </div>
+        <button id="portfolioNext" class="px-3 py-1.5 bg-ink-850 hover:bg-ink-800 border border-ink-700 rounded-lg text-slate-300 transition" title="Next property by this owner">→</button>
+      </div>
+    </div>
 
     <div class="mb-5">
       <div class="flex items-center gap-2 mb-2 flex-wrap">
@@ -1149,6 +1165,67 @@ function openPanel(id) {
   requestAnimationFrame(() => { p.classList.remove('panel-enter'); p.classList.add('panel-active') })
 
   loadMessages(id)
+  loadOwnerPortfolio(l)
+}
+
+// Fetch the owner's full property portfolio so the user can cycle through it
+// before placing a call. Lets you spot a 22-property landlord and pitch
+// portfolio sale instead of a single-property buy.
+async function loadOwnerPortfolio(l) {
+  const ownerName = l.owner_entity_name || l.owner_full_name
+  if (!ownerName) return
+
+  const { data: portfolio, error } = await sb
+    .from('properties')
+    .select('qref, parcel_id, address, primary_photo_url, current_assessed_val, res_year_built')
+    .eq('current_owner', ownerName)
+    .order('current_assessed_val', { ascending: false, nullsFirst: false })
+    .limit(500)
+  if (error || !portfolio || portfolio.length <= 1) return
+
+  // Find the currently-displayed property in the portfolio (match by parcel_id)
+  let idx = portfolio.findIndex(p => p.parcel_id === l.parcel_id_primary)
+  if (idx === -1) idx = 0
+
+  const nav = document.getElementById('portfolioNav')
+  if (!nav) return
+  nav.classList.remove('hidden')
+
+  const photoEl   = document.getElementById('portfolioPhoto')
+  const addrEl    = document.getElementById('portfolioCurrentAddr')
+  const idxEl     = document.getElementById('portfolioIdx')
+  const totalEl   = document.getElementById('portfolioTotal')
+  const ybAvEl    = document.getElementById('portfolioAssessedYB')
+  const assessorEl = document.getElementById('portfolioAssessorLink')
+  totalEl.textContent = portfolio.length
+
+  const update = () => {
+    const p = portfolio[idx]
+    if (photoEl && p.primary_photo_url) {
+      photoEl.src = p.primary_photo_url
+      photoEl.style.display = ''
+    } else if (photoEl && photoEl.tagName === 'IMG') {
+      photoEl.style.display = 'none'
+    }
+    if (addrEl) addrEl.textContent = p.address || '(no address)'
+    if (idxEl) idxEl.textContent = idx + 1
+    if (ybAvEl) {
+      const yb = p.res_year_built ? `built ${p.res_year_built}` : ''
+      const av = p.current_assessed_val ? `$${Number(p.current_assessed_val).toLocaleString()}` : ''
+      ybAvEl.textContent = [yb, av].filter(Boolean).join(' · ')
+    }
+    if (assessorEl && p.qref) {
+      assessorEl.href = 'https://orion.lancaster.ne.gov/Property-Detail/PropertyQuickRefID/' + p.qref
+    }
+  }
+  update()  // populate initial address+meta for the lead being viewed
+
+  document.getElementById('portfolioPrev').addEventListener('click', () => {
+    idx = (idx - 1 + portfolio.length) % portfolio.length; update()
+  })
+  document.getElementById('portfolioNext').addEventListener('click', () => {
+    idx = (idx + 1) % portfolio.length; update()
+  })
 }
 
 function renderSequenceSection(l) {
