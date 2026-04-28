@@ -253,6 +253,7 @@
     <!-- Lead list -->
     <main class="flex-1 px-6 py-5">
       <div id="leadList" class="space-y-2"></div>
+      <div id="paginationBar" class="hidden flex items-center justify-center gap-3 mt-6 pb-6 text-sm"></div>
       <p id="emptyMsg" class="hidden text-center text-slate-500 py-12">No leads match your filters.</p>
     </main>
   </div>
@@ -599,6 +600,7 @@ function updateTotals() {
 
 // ─────── FILTERS + SORT + SEARCH ───────
 function applyFilters() {
+  currentPage = 1   // any filter change resets pagination
   filtered = leads.filter(l => {
     if (currentView === 'inbox' && STAGE_BUCKET(l.current_stage) !== 'replied') return false
     if (currentView === 'tasks' && (!l.next_action || !isDueNow(l.next_action_due_at))) return false
@@ -758,10 +760,15 @@ document.getElementById('viewNameInput').addEventListener('keydown', (e) => {
 })
 
 // ─────── RENDERING ───────
+const LEADS_PER_PAGE = 500
+let currentPage = 1
+
 function renderList() {
   const container = document.getElementById('leadList')
   const empty = document.getElementById('emptyMsg')
+  const pagBar = document.getElementById('paginationBar')
   container.innerHTML = ''
+  pagBar.classList.add('hidden')
   if (filtered.length === 0) {
     empty.classList.remove('hidden')
     empty.textContent = currentView === 'inbox'
@@ -770,7 +777,14 @@ function renderList() {
     refreshSelectionUI(); return
   }
   empty.classList.add('hidden')
-  container.innerHTML = filtered.map(renderRow).join('')
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / LEADS_PER_PAGE))
+  if (currentPage > totalPages) currentPage = totalPages
+  if (currentPage < 1) currentPage = 1
+  const start = (currentPage - 1) * LEADS_PER_PAGE
+  const pageRows = filtered.slice(start, start + LEADS_PER_PAGE)
+
+  container.innerHTML = pageRows.map(renderRow).join('')
   container.querySelectorAll('[data-id]').forEach(el => {
     el.addEventListener('click', (e) => {
       if (e.target.closest('input[type="checkbox"]')) return
@@ -788,6 +802,25 @@ function renderList() {
   container.querySelectorAll('[data-rowaction]').forEach(b => {
     b.addEventListener('click', (e) => { e.stopPropagation(); handleRowAction(b.dataset.rowaction, b.dataset.id) })
   })
+
+  // Render pagination bar (only if more than one page)
+  if (totalPages > 1) {
+    pagBar.classList.remove('hidden')
+    const prevDis = currentPage <= 1 ? 'opacity-30 pointer-events-none' : ''
+    const nextDis = currentPage >= totalPages ? 'opacity-30 pointer-events-none' : ''
+    pagBar.innerHTML = `
+      <button id="pagPrev" class="px-3 py-1.5 bg-ink-850 hover:bg-ink-800 border border-ink-700 rounded-lg text-slate-300 transition ${prevDis}">← prev</button>
+      <span class="text-slate-400">Page <span class="text-white font-semibold">${currentPage}</span> of <span class="text-white font-semibold">${totalPages}</span> <span class="text-slate-600 mx-1">·</span> ${filtered.length.toLocaleString()} leads (${LEADS_PER_PAGE}/page)</span>
+      <button id="pagNext" class="px-3 py-1.5 bg-ink-850 hover:bg-ink-800 border border-ink-700 rounded-lg text-slate-300 transition ${nextDis}">next →</button>
+    `
+    document.getElementById('pagPrev').addEventListener('click', () => {
+      if (currentPage > 1) { currentPage--; renderList(); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+    })
+    document.getElementById('pagNext').addEventListener('click', () => {
+      if (currentPage < totalPages) { currentPage++; renderList(); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+    })
+  }
+
   refreshSelectionUI()
 }
 
