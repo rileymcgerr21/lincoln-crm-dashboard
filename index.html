@@ -1059,28 +1059,28 @@ function openPanel(id) {
 
     <div class="mb-5">
       <div class="flex items-center gap-2 mb-2 flex-wrap">
-        <span class="px-2 py-1 rounded-md text-sm font-black ${
+        <span id="panelDistressBadge" class="px-2 py-1 rounded-md text-sm font-black ${
           l.distress_score >= 8 ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' :
           l.distress_score >= 6 ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-300'
         }">${l.distress_score != null ? Number(l.distress_score).toFixed(1) : '—'}</span>
         <h2 class="text-xl font-bold text-white">${escape(l.owner_entity_name || l.owner_full_name || '(unknown)')}</h2>
         <span class="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${ss.bg} ${ss.fg}">${ss.label}</span>
       </div>
-      <div class="text-slate-300">${escape(l.property_address || '')}</div>
-      <div class="text-xs text-slate-600 font-mono mt-1">parcel ${escape(l.parcel_id_primary)}</div>
+      <div id="panelPropertyAddress" class="text-slate-300">${escape(l.property_address || '')}</div>
+      <div id="panelParcelId" class="text-xs text-slate-600 font-mono mt-1">parcel ${escape(l.parcel_id_primary)}</div>
     </div>
 
-    ${l.distress_notes ? `<div class="mb-5 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-200">${escape(l.distress_notes)}</div>` : ''}
+    <div id="panelDistressNotesWrap">${l.distress_notes ? `<div class="mb-5 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-200">${escape(l.distress_notes)}</div>` : ''}</div>
 
     ${renderSequenceSection(l)}
 
-    ${renderDealSection(l)}
+    <div id="panelDealSectionWrap">${renderDealSection(l)}</div>
 
     <div class="mb-5">${SECTION('Lists / Cohorts')}<div class="flex flex-wrap gap-1.5">${stackList}</div></div>
 
     <dl class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm mb-5 p-3 bg-ink-950/40 border border-ink-800 rounded-lg">
-      <dt class="text-slate-500 text-xs uppercase tracking-wider font-semibold">Year built</dt>     <dd class="text-slate-200">${l.year_built || '—'}</dd>
-      <dt class="text-slate-500 text-xs uppercase tracking-wider font-semibold">Assessed</dt>       <dd class="text-slate-200 font-semibold">${l.assessed_value ? '$' + l.assessed_value.toLocaleString() : '—'}</dd>
+      <dt class="text-slate-500 text-xs uppercase tracking-wider font-semibold">Year built</dt>     <dd id="panelYearBuilt" class="text-slate-200">${l.year_built || '—'}</dd>
+      <dt class="text-slate-500 text-xs uppercase tracking-wider font-semibold">Assessed</dt>       <dd id="panelAssessed" class="text-slate-200 font-semibold">${l.assessed_value ? '$' + l.assessed_value.toLocaleString() : '—'}</dd>
       <dt class="text-slate-500 text-xs uppercase tracking-wider font-semibold">Mailing</dt>        <dd class="text-slate-200">${escape([l.mailing_address, l.mailing_city, l.mailing_state, l.mailing_zip].filter(Boolean).join(', ') || '—')}</dd>
       <dt class="text-slate-500 text-xs uppercase tracking-wider font-semibold">Stage (raw)</dt>    <dd class="font-mono text-xs text-slate-400">${escape(l.current_stage)}</dd>
       <dt class="text-slate-500 text-xs uppercase tracking-wider font-semibold">Priority</dt>       <dd class="text-slate-200">${l.priority}</dd>
@@ -1219,27 +1219,92 @@ async function loadOwnerPortfolio(l) {
   // Find the currently-displayed property in the portfolio (match by parcel_id)
   let idx = portfolio.findIndex(p => p.parcel_id === l.parcel_id_primary)
   if (idx === -1) idx = 0
+  const originalQref = portfolio[idx].qref
 
   const nav = document.getElementById('portfolioNav')
   if (!nav) return
   nav.classList.remove('hidden')
 
-  const photoEl   = document.getElementById('portfolioPhoto')
-  const addrEl    = document.getElementById('portfolioCurrentAddr')
-  const idxEl     = document.getElementById('portfolioIdx')
-  const totalEl   = document.getElementById('portfolioTotal')
-  const ybAvEl    = document.getElementById('portfolioAssessedYB')
+  const photoEl    = document.getElementById('portfolioPhoto')
+  const addrEl     = document.getElementById('portfolioCurrentAddr')
+  const idxEl      = document.getElementById('portfolioIdx')
+  const totalEl    = document.getElementById('portfolioTotal')
+  const ybAvEl     = document.getElementById('portfolioAssessedYB')
   const assessorEl = document.getElementById('portfolioAssessorLink')
   totalEl.textContent = portfolio.length
 
-  const update = () => {
+  // Cache: qref → { distress, deal } so we don't re-fetch when cycling back
+  const enrichmentCache = {}
+  // Pre-seed the original lead's data (we already have it in `l`)
+  enrichmentCache[originalQref] = {
+    distress_score: l.distress_score,
+    distress_notes: l.distress_notes,
+    deal: l.deal,
+  }
+
+  async function fetchEnrichment(qref) {
+    if (enrichmentCache[qref]) return enrichmentCache[qref]
+    // Fetch distress + deal in parallel
+    const [distressR, dealR] = await Promise.all([
+      sb.from('distress_analysis').select('overall_distress_score, notes').eq('qref', qref).maybeSingle(),
+      sb.from('v_top_deals').select(
+        'qref, deal_score_v2, deal_score_tier, deal_flags, arv_estimate, rehab_estimate, suggested_offer, ' +
+        'owner_is_known_flipper, flipper_operator, is_tax_delinquent, is_out_of_state, is_pro_owner, ' +
+        'owner_property_count, last_sale_year, tax_owed'
+      ).eq('qref', qref).maybeSingle(),
+    ])
+    const econ = dealR?.data
+    const enrichment = {
+      distress_score: distressR?.data?.overall_distress_score ?? null,
+      distress_notes: distressR?.data?.notes ?? null,
+      deal: econ ? {
+        score:           econ.deal_score_v2,
+        score_tier:      econ.deal_score_tier,
+        flags:           econ.deal_flags,
+        arv_estimate:    econ.arv_estimate,
+        rehab_estimate:  econ.rehab_estimate,
+        suggested_offer: econ.suggested_offer,
+        owner_is_known_flipper: econ.owner_is_known_flipper ?? null,
+        flipper_operator:       econ.flipper_operator ?? null,
+        is_tax_delinquent:      econ.is_tax_delinquent ?? null,
+        is_out_of_state:        econ.is_out_of_state ?? null,
+        is_pro_owner:           econ.is_pro_owner ?? null,
+        owner_property_count:   econ.owner_property_count ?? null,
+        last_sale_year:         econ.last_sale_year ?? null,
+        tax_owed:               econ.tax_owed ?? null,
+      } : null,
+    }
+    enrichmentCache[qref] = enrichment
+    return enrichment
+  }
+
+  const distressBadgeEl = document.getElementById('panelDistressBadge')
+  const distressNotesEl = document.getElementById('panelDistressNotesWrap')
+  const dealSectionEl   = document.getElementById('panelDealSectionWrap')
+  const propAddrEl      = document.getElementById('panelPropertyAddress')
+  const parcelIdEl      = document.getElementById('panelParcelId')
+  const yearBuiltEl     = document.getElementById('panelYearBuilt')
+  const assessedEl      = document.getElementById('panelAssessed')
+
+  function distressBadgeClass(score) {
+    if (score == null) return 'bg-slate-800 text-slate-500'
+    if (score >= 8) return 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+    if (score >= 6) return 'bg-amber-500 text-white'
+    return 'bg-slate-700 text-slate-300'
+  }
+
+  async function update() {
     const p = portfolio[idx]
+    const isOriginal = p.qref === originalQref
+
+    // Photo
     if (photoEl && p.primary_photo_url) {
       photoEl.src = p.primary_photo_url
       photoEl.style.display = ''
     } else if (photoEl && photoEl.tagName === 'IMG') {
       photoEl.style.display = 'none'
     }
+    // Photo caption
     if (addrEl) addrEl.textContent = p.address || '(no address)'
     if (idxEl) idxEl.textContent = idx + 1
     if (ybAvEl) {
@@ -1250,8 +1315,40 @@ async function loadOwnerPortfolio(l) {
     if (assessorEl && p.qref) {
       assessorEl.href = 'https://orion.lancaster.ne.gov/Property-Detail/PropertyQuickRefID/' + p.qref
     }
+
+    // Header property address + parcel id
+    if (propAddrEl) propAddrEl.textContent = p.address || ''
+    if (parcelIdEl) parcelIdEl.textContent = 'parcel ' + (p.parcel_id || '—') + (isOriginal ? '' : '  ·  (viewing portfolio property — lead-level fields below still apply to original lead)')
+
+    // Key facts
+    if (yearBuiltEl) yearBuiltEl.textContent = p.res_year_built || '—'
+    if (assessedEl)  assessedEl.textContent  = p.current_assessed_val ? '$' + Number(p.current_assessed_val).toLocaleString() : '—'
+
+    // Distress + deal: show "loading…" stub then update when fetch returns
+    if (distressBadgeEl) {
+      distressBadgeEl.className = 'px-2 py-1 rounded-md text-sm font-black ' + distressBadgeClass(null)
+      distressBadgeEl.textContent = '…'
+    }
+    if (distressNotesEl) distressNotesEl.innerHTML = ''
+    if (dealSectionEl)   dealSectionEl.innerHTML = '<div class="mb-5 p-3 bg-ink-850 border border-ink-700 rounded-lg text-sm text-slate-500">Loading deal data…</div>'
+
+    const e = await fetchEnrichment(p.qref)
+
+    if (distressBadgeEl) {
+      distressBadgeEl.className = 'px-2 py-1 rounded-md text-sm font-black ' + distressBadgeClass(e.distress_score)
+      distressBadgeEl.textContent = e.distress_score != null ? Number(e.distress_score).toFixed(1) : '—'
+    }
+    if (distressNotesEl) {
+      distressNotesEl.innerHTML = e.distress_notes
+        ? `<div class="mb-5 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-200">${escape(e.distress_notes)}</div>`
+        : ''
+    }
+    if (dealSectionEl) {
+      // renderDealSection takes a lead-shaped object with `.deal`; we pass a synthetic one
+      dealSectionEl.innerHTML = renderDealSection({ deal: e.deal })
+    }
   }
-  update()  // populate initial address+meta for the lead being viewed
+  update()  // initial render (will use cache for the original lead — no extra fetch)
 
   document.getElementById('portfolioPrev').addEventListener('click', () => {
     idx = (idx - 1 + portfolio.length) % portfolio.length; update()
