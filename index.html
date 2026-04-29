@@ -22,29 +22,75 @@
   }
 </script>
 <style>
+  /* Emil-style custom easings — stronger than CSS defaults */
+  :root {
+    --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);          /* punchy ease-out for UI */
+    --ease-in-out:   cubic-bezier(0.77, 0, 0.175, 1);         /* on-screen movement */
+    --ease-drawer:   cubic-bezier(0.32, 0.72, 0, 1);          /* iOS drawer feel */
+  }
+
   html, body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11'; }
-  body { background: radial-gradient(ellipse at top, #0f1530 0%, #070912 60%) fixed; }
+  body { background: radial-gradient(ellipse at top, #0f1530 0%, #070912 60%) fixed; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+  /* Global press feedback — buttons must feel responsive */
+  button { transition: transform 80ms var(--ease-out), background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), opacity 120ms var(--ease-out); }
+  button:active:not(:disabled) { transform: scale(0.97); }
+  /* Larger interactive surfaces (tiles, lead rows) get a softer scale */
+  .stat-tile:active, [data-id]:active { transform: scale(0.995); }
+
+  /* Side panel — iOS-style drawer curve */
+  #panel { transition: transform 280ms var(--ease-drawer) !important; }
   .panel-enter { transform: translateX(100%); }
   .panel-active { transform: translateX(0); }
-  select { background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3aacb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.5rem center; padding-right: 1.75rem; appearance: none; }
+
+  /* Overlay backdrop — fade instead of snap.
+     Override Tailwind's .hidden { display:none } so the transition can run. */
+  #overlay { opacity: 0; pointer-events: none; transition: opacity 180ms var(--ease-out); }
+  #overlay.hidden { display: block; opacity: 0; pointer-events: none; }
+  #overlay:not(.hidden) { opacity: 1; pointer-events: auto; }
+
+  /* Faster spinner — perceived performance */
+  @keyframes lcrm-spin { to { transform: rotate(360deg); } }
+  .animate-spin { animation: lcrm-spin 700ms linear infinite !important; }
+
+  select { background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3aacb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.5rem center; padding-right: 1.75rem; appearance: none; transition: border-color 120ms var(--ease-out); }
+  select:focus { outline: none; border-color: rgb(99 102 241); }
+
   /* Photo fallback */
   .photo-fallback { background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(99,102,241,0.02)); }
-  /* Sidebar nav */
-  .nav-item { transition: all 120ms ease; }
+
+  /* Sidebar nav — specific properties only */
+  .nav-item { transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out); }
   .nav-item.active { background-color: rgb(99 102 241 / 0.15); color: rgb(199 210 254); }
   .nav-item.active::before { content: ''; position: absolute; left: 0; top: 0.5rem; bottom: 0.5rem; width: 3px; background: rgb(129 140 248); border-radius: 0 2px 2px 0; }
+
   /* Stack dot */
   .stack-dot { width: 0.5rem; height: 0.5rem; border-radius: 9999px; display: inline-block; box-shadow: 0 0 0 1.5px rgb(7 9 18); }
-  /* Tile gradient sheen */
-  .stat-tile { position: relative; overflow: hidden; }
+
+  /* Lead row — gentle hover lift, only animate the things that actually change */
+  [data-id] { transition: border-color 150ms var(--ease-out), background-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out), transform 80ms var(--ease-out); }
+  [data-id]:hover { box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.4); }
+
+  /* Stat tiles — lift + accent shadow on hover */
+  .stat-tile { position: relative; overflow: hidden; transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out), transform 80ms var(--ease-out); }
   .stat-tile::after { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 60%); pointer-events: none; }
+  .stat-tile:hover { box-shadow: 0 6px 16px -4px rgb(0 0 0 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.04); }
+
+  /* Quickfilter chips — specific transition */
+  .quickfilter-chip, .tag-chip { transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), color 150ms var(--ease-out), transform 80ms var(--ease-out); }
+
+  /* Inputs — focused border animation */
+  input[type="text"], input[type="email"], input[type="search"], textarea { transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out); }
+
+  /* Score badge — soft entry */
+  @keyframes lcrm-pop { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+  [data-id] .px-2.py-0\.5.rounded-md { animation: lcrm-pop 180ms var(--ease-out) both; }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: #070912; }
   ::-webkit-scrollbar-thumb { background: #1a1f3a; border-radius: 8px; border: 2px solid #070912; }
   ::-webkit-scrollbar-thumb:hover { background: #262b4a; }
-  /* Subtle text rendering */
-  body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 </style>
 </head>
 <body class="text-slate-100">
@@ -1002,7 +1048,7 @@ window.closePanel = () => {
   const p = document.getElementById('panel')
   const o = document.getElementById('overlay')
   p.classList.remove('panel-active'); p.classList.add('panel-enter')
-  setTimeout(() => { p.classList.add('hidden'); o.classList.add('hidden') }, 200)
+  setTimeout(() => { p.classList.add('hidden'); o.classList.add('hidden') }, 280)
 }
 
 const STAGE_TRANSITIONS = [
