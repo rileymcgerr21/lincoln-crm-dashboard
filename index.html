@@ -469,7 +469,7 @@ async function loadLeads() {
     sb.from('v_lead_worklist').select('id, deal_score_v2, deal_score_tier, deal_flags').limit(15000),
     sb.from('v_top_deals').select(
       'lead_id, arv_estimate, rehab_estimate, suggested_offer, ' +
-      'as_is_estimate, wholesale_offer, wholesale_margin, nbh_comps_used, pricing_source, ' +
+      'as_is_estimate, wholesale_offer, wholesale_margin, nbh_comps_used, pricing_source, starting_offer, ' +
       'owner_is_known_flipper, flipper_operator, is_tax_delinquent, is_out_of_state, is_pro_owner, ' +
       'owner_property_count, last_sale_year, tax_owed'
     ).not('lead_id', 'is', null).limit(15000)
@@ -506,6 +506,7 @@ async function loadLeads() {
         wholesale_margin:       econ?.wholesale_margin ?? null,
         nbh_comps_used:         econ?.nbh_comps_used ?? null,
         pricing_source:         econ?.pricing_source ?? null,
+        starting_offer:         econ?.starting_offer ?? null,
         owner_is_known_flipper: econ?.owner_is_known_flipper ?? null,
         flipper_operator:       econ?.flipper_operator ?? null,
         is_tax_delinquent:      econ?.is_tax_delinquent ?? null,
@@ -1270,7 +1271,7 @@ async function loadOwnerPortfolio(l) {
       sb.from('distress_analysis').select('overall_distress_score, notes').eq('qref', qref).maybeSingle(),
       sb.from('v_top_deals').select(
         'qref, deal_score_v2, deal_score_tier, deal_flags, arv_estimate, rehab_estimate, suggested_offer, ' +
-        'as_is_estimate, wholesale_offer, wholesale_margin, nbh_comps_used, pricing_source, ' +
+        'as_is_estimate, wholesale_offer, wholesale_margin, nbh_comps_used, pricing_source, starting_offer, ' +
         'owner_is_known_flipper, flipper_operator, is_tax_delinquent, is_out_of_state, is_pro_owner, ' +
         'owner_property_count, last_sale_year, tax_owed'
       ).eq('qref', qref).maybeSingle(),
@@ -1291,6 +1292,7 @@ async function loadOwnerPortfolio(l) {
         wholesale_margin: econ.wholesale_margin ?? null,
         nbh_comps_used:   econ.nbh_comps_used ?? null,
         pricing_source:   econ.pricing_source ?? null,
+        starting_offer:   econ.starting_offer ?? null,
         owner_is_known_flipper: econ.owner_is_known_flipper ?? null,
         flipper_operator:       econ.flipper_operator ?? null,
         is_tax_delinquent:      econ.is_tax_delinquent ?? null,
@@ -1521,61 +1523,57 @@ function renderDealSection(l) {
     ? flags.map(f => `<span class="text-xs px-2 py-1 rounded-md ${f.cls}">${escape(f.label)}</span>`).join(' ')
     : '<span class="text-xs text-slate-500">No flags</span>'
 
-  // Rehab-flipper economics (kept for comparison)
+  // Backing economics
   const arv      = d.arv_estimate
   const rehab    = d.rehab_estimate
-  const offer    = d.suggested_offer
-  // Wholesale economics (your model — buy at 75% of as-is, sell as-is)
+  const ceiling  = d.suggested_offer        // rehabber MAO — hard walk-away
+  const opening  = d.starting_offer         // 60% of MAO — first cold offer
   const asIs     = d.as_is_estimate
   const wOffer   = d.wholesale_offer
-  const wMargin  = d.wholesale_margin
   const nbhN     = d.nbh_comps_used
   const pSource  = d.pricing_source
+  // Walk-up max = 85% of rehabber MAO (negotiation stretch — between opening and ceiling)
+  const walkUp   = ceiling != null ? Math.round(Number(ceiling) * 0.85) : null
   const sourceLabel = pSource === 'nbh_specific' ? `${nbhN || 0} nbh comps`
                     : pSource === 'nbh_thin'     ? `thin (${nbhN || 0})`
                     : pSource === 'city_wide'    ? 'city-wide fallback'
                     : ''
 
-  const wholesaleHtml = (asIs || wOffer || wMargin)
+  // The negotiation ladder — three ascending numbers from MAO
+  const ladderHtml = (opening || walkUp || ceiling)
     ? `<div class="mt-3">
-        <div class="flex items-center justify-between mb-1.5">
-          <div class="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Your wholesale numbers</div>
-          ${sourceLabel ? `<div class="text-[9px] text-slate-500">${escape(sourceLabel)}</div>` : ''}
-        </div>
+        <div class="text-[10px] font-bold uppercase tracking-wider text-cyan-300 mb-1.5">Negotiation ladder</div>
         <div class="grid grid-cols-3 gap-2">
-          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">As-is value</div>
-            <div class="text-base font-bold text-slate-200 mt-0.5">${asIs ? '$' + Number(asIs).toLocaleString() : '—'}</div>
+          <div class="bg-cyan-500/15 border border-cyan-500/40 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-cyan-300 font-semibold">Opening</div>
+            <div class="text-base font-black text-cyan-200 mt-0.5">${opening ? '$' + Number(opening).toLocaleString() : '—'}</div>
+            <div class="text-[9px] text-cyan-400/70 mt-0.5">60% of MAO · anchor low</div>
           </div>
-          <div class="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-cyan-400 font-semibold">Your offer (75%)</div>
-            <div class="text-base font-black text-cyan-300 mt-0.5">${wOffer ? '$' + Number(wOffer).toLocaleString() : '—'}</div>
+          <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-amber-300 font-semibold">Walk-up max</div>
+            <div class="text-base font-bold text-amber-200 mt-0.5">${walkUp ? '$' + Number(walkUp).toLocaleString() : '—'}</div>
+            <div class="text-[9px] text-amber-400/70 mt-0.5">85% of MAO · stretch</div>
           </div>
-          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Margin</div>
-            <div class="text-base font-bold text-emerald-300 mt-0.5">${wMargin ? '$' + Number(wMargin).toLocaleString() : '—'}</div>
+          <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-red-300 font-semibold">Hard walk-away</div>
+            <div class="text-base font-bold text-red-200 mt-0.5">${ceiling ? '$' + Number(ceiling).toLocaleString() : '—'}</div>
+            <div class="text-[9px] text-red-400/70 mt-0.5">rehabber MAO · never above</div>
           </div>
         </div>
       </div>` : ''
 
-  const econHtml = (arv || rehab || offer)
-    ? `<div class="mt-3">
-        <div class="text-[10px] font-bold uppercase tracking-wider text-amber-300 mb-1.5">Rehabber's numbers (their MAO formula)</div>
-        <div class="grid grid-cols-3 gap-2">
-          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">ARV</div>
-            <div class="text-base font-bold text-slate-200 mt-0.5">${arv ? '$' + Number(arv).toLocaleString() : '—'}</div>
-          </div>
-          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Rehab</div>
-            <div class="text-base font-bold text-amber-300 mt-0.5">${rehab ? '$' + Number(rehab).toLocaleString() : '—'}</div>
-          </div>
-          <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-emerald-400 font-semibold">Rehabber MAO</div>
-            <div class="text-base font-black text-emerald-300 mt-0.5">${offer ? '$' + Number(offer).toLocaleString() : '—'}</div>
-          </div>
-        </div>
-      </div>${wholesaleHtml}` : wholesaleHtml
+  // Backing math row — small, informational
+  const backingParts = []
+  if (arv)    backingParts.push(`ARV $${Number(arv).toLocaleString()}`)
+  if (asIs)   backingParts.push(`As-is $${Number(asIs).toLocaleString()}`)
+  if (rehab)  backingParts.push(`Rehab $${Number(rehab).toLocaleString()}`)
+  if (wOffer) backingParts.push(`Wholesale stretch $${Number(wOffer).toLocaleString()}`)
+  if (sourceLabel) backingParts.push(sourceLabel)
+  const backingHtml = backingParts.length
+    ? `<div class="mt-2 text-[10px] text-slate-500">${backingParts.map(escape).join(' · ')}</div>`
+    : ''
+
+  const econHtml = ladderHtml + backingHtml
 
   return `
     <div class="mb-5 p-4 bg-gradient-to-br from-indigo-900/20 to-ink-850 border border-indigo-500/20 rounded-xl">
