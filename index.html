@@ -550,6 +550,7 @@ async function loadLeads() {
         as_is_estimate:         econ?.as_is_estimate ?? null,
         wholesale_offer:        econ?.wholesale_offer ?? null,
         wholesale_margin:       econ?.wholesale_margin ?? null,
+        starting_offer:         econ?.starting_offer ?? null,
         nbh_comps_used:         econ?.nbh_comps_used ?? null,
         pricing_source:         econ?.pricing_source ?? null,
         owner_is_known_flipper: econ?.owner_is_known_flipper ?? null,
@@ -1335,6 +1336,7 @@ async function loadOwnerPortfolio(l) {
         as_is_estimate:   econ.as_is_estimate ?? null,
         wholesale_offer:  econ.wholesale_offer ?? null,
         wholesale_margin: econ.wholesale_margin ?? null,
+        starting_offer:   econ.starting_offer ?? null,
         nbh_comps_used:   econ.nbh_comps_used ?? null,
         pricing_source:   econ.pricing_source ?? null,
         owner_is_known_flipper: econ.owner_is_known_flipper ?? null,
@@ -1604,24 +1606,59 @@ function renderDealSection(l) {
         </div>
       </div>` : ''
 
+  // Negotiation ladder: first offer (anchor) → walk-up max → hard ceiling.
+  // first offer = 60% of rehabber MAO  (will switch to deal_rankings.starting_offer when buddy ships it)
+  // walk-up max = wholesale_offer (75% of as-is)
+  // hard ceiling = rehabber MAO (suggested_offer)
+  // Prefer buddy's authoritative starting_offer column if present, else compute 60% of MAO client-side
+  const firstOffer = d.starting_offer ?? (offer ? Math.round(offer * 0.60) : null)
+  const walkUp     = wOffer || null
+  const ceiling    = offer || null
+  const ladderHtml = (firstOffer || walkUp || ceiling)
+    ? `<div class="mt-3">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-1.5">📈 Negotiation Ladder · what to actually offer</div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="bg-emerald-500/15 border border-emerald-500/40 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-emerald-400 font-bold">First offer</div>
+            <div class="text-lg font-black text-emerald-300 mt-0.5">${firstOffer ? '$' + Number(firstOffer).toLocaleString() : '—'}</div>
+            <div class="text-[9px] text-emerald-500/80 mt-0.5">your text/letter anchor</div>
+          </div>
+          <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-amber-400 font-bold">Walk-up max</div>
+            <div class="text-lg font-black text-amber-300 mt-0.5">${walkUp ? '$' + Number(walkUp).toLocaleString() : '—'}</div>
+            <div class="text-[9px] text-amber-500/80 mt-0.5">your stretch — still profitable</div>
+          </div>
+          <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-red-400 font-bold">Hard ceiling</div>
+            <div class="text-lg font-black text-red-300 mt-0.5">${ceiling ? '$' + Number(ceiling).toLocaleString() : '—'}</div>
+            <div class="text-[9px] text-red-500/80 mt-0.5">walk away above this</div>
+          </div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-1.5">Tip: text the first offer. Negotiate up to walk-up. Walk away if they push past ceiling.</div>
+      </div>` : ''
+
+  // Underlying model numbers (collapsed below the ladder for reference)
   const econHtml = (arv || rehab || offer)
     ? `<div class="mt-3">
-        <div class="text-[10px] font-bold uppercase tracking-wider text-amber-300 mb-1.5">Rehabber's numbers (their MAO formula)</div>
+        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">📊 Underlying numbers</div>
         <div class="grid grid-cols-3 gap-2">
           <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
             <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">ARV</div>
             <div class="text-base font-bold text-slate-200 mt-0.5">${arv ? '$' + Number(arv).toLocaleString() : '—'}</div>
           </div>
           <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Rehab</div>
+            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Rehab est</div>
             <div class="text-base font-bold text-amber-300 mt-0.5">${rehab ? '$' + Number(rehab).toLocaleString() : '—'}</div>
           </div>
-          <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-emerald-400 font-semibold">Rehabber MAO</div>
-            <div class="text-base font-black text-emerald-300 mt-0.5">${offer ? '$' + Number(offer).toLocaleString() : '—'}</div>
+          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">As-is${sourceLabel ? ` · ${sourceLabel}` : ''}</div>
+            <div class="text-base font-bold text-slate-200 mt-0.5">${asIs ? '$' + Number(asIs).toLocaleString() : '—'}</div>
           </div>
         </div>
-      </div>${wholesaleHtml}` : wholesaleHtml
+      </div>` : ''
+
+  // Combine: ladder is the primary CTA, underlying numbers below
+  const allHtml = ladderHtml + econHtml
 
   return `
     <div class="mb-5 p-4 bg-gradient-to-br from-indigo-900/20 to-ink-850 border border-indigo-500/20 rounded-xl">
@@ -1634,7 +1671,7 @@ function renderDealSection(l) {
       </div>
       <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Why it scores this way</div>
       <div class="flex flex-wrap gap-1.5">${flagsHtml}</div>
-      ${econHtml}
+      ${allHtml}
     </div>`
 }
 
