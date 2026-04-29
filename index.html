@@ -1132,6 +1132,8 @@ function openPanel(id) {
 
     <div id="panelDealSectionWrap">${renderDealSection(l)}</div>
 
+    <div id="panelOfferFormWrap">${renderOfferForm(l)}</div>
+
     <div class="mb-5">${SECTION('Lists / Cohorts')}<div class="flex flex-wrap gap-1.5">${stackList}</div></div>
 
     <dl class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm mb-5 p-3 bg-ink-950/40 border border-ink-800 rounded-lg">
@@ -1254,6 +1256,7 @@ function openPanel(id) {
   requestAnimationFrame(() => { p.classList.remove('panel-enter'); p.classList.add('panel-active') })
 
   loadMessages(id)
+  bindOfferForm(l.id)
   loadOwnerPortfolio(l)
 }
 
@@ -1555,6 +1558,148 @@ async function advanceSequence(leadId, opts = {}) {
   if (error) return alert('Failed to advance: ' + error.message)
   Object.assign(lead, patch)
   applyFilters(); updateTotals(); openPanel(leadId)
+}
+
+function renderOfferForm(l) {
+  const ladderHint = l.deal && l.deal.starting_offer
+    ? ` (ladder opening: $${Number(l.deal.starting_offer).toLocaleString()})`
+    : ''
+  const r = l.offer_response || ''
+  const sent = l.offer_sent_at ? new Date(l.offer_sent_at).toLocaleDateString() : ''
+  const closed = l.closed_at ? new Date(l.closed_at).toLocaleDateString() : ''
+
+  // Status badge for the form header
+  const badge = !r ? ''
+    : r === 'accepted'    ? '<span class="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-200 font-bold">ACCEPTED</span>'
+    : r === 'countered'   ? '<span class="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-200 font-bold">COUNTERED</span>'
+    : r === 'rejected'    ? '<span class="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-rose-500/30 text-rose-200 font-bold">REJECTED</span>'
+    : r === 'no_response' ? '<span class="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-slate-600 text-slate-300">NO RESPONSE</span>'
+    : r === 'pending'     ? '<span class="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-200 font-bold">PENDING</span>'
+    : r === 'fell_through'? '<span class="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-rose-500/30 text-rose-200">FELL THROUGH</span>'
+    : ''
+
+  const showCounter = r === 'countered'
+  const showClosed  = r === 'accepted' || r === 'fell_through'
+
+  return `
+    <details class="mb-5" ${l.offer_amount ? 'open' : ''}>
+      <summary class="cursor-pointer p-3 bg-ink-850 border border-ink-700 rounded-lg flex items-center justify-between hover:bg-ink-800">
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-300">📝 Log offer outcome</span>
+          ${badge}
+          ${l.offer_amount ? `<span class="text-xs text-slate-400">$${Number(l.offer_amount).toLocaleString()}${sent ? ' · sent ' + sent : ''}</span>` : ''}
+        </div>
+        <span class="text-slate-500 text-xs">click to expand</span>
+      </summary>
+      <div class="mt-2 p-4 bg-ink-950/40 border border-ink-800 rounded-lg space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block">
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Offer amount${ladderHint}</span>
+            <input id="offerAmount_${l.id}" type="number" min="0" step="500" value="${l.offer_amount || ''}"
+              class="mt-1 w-full bg-ink-900 border border-ink-700 rounded-lg px-2 py-1.5 text-slate-200 focus:border-cyan-500 focus:outline-none"
+              placeholder="0" />
+          </label>
+          <label class="block">
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Response</span>
+            <select id="offerResponse_${l.id}" data-lead="${l.id}"
+              class="mt-1 w-full bg-ink-900 border border-ink-700 rounded-lg px-2 py-1.5 text-slate-200 focus:border-cyan-500 focus:outline-none">
+              <option value="">— select —</option>
+              <option value="pending"      ${r==='pending'?'selected':''}>Pending — sent, no reply yet</option>
+              <option value="no_response"  ${r==='no_response'?'selected':''}>No response (cold ignored)</option>
+              <option value="rejected"     ${r==='rejected'?'selected':''}>Rejected (no counter)</option>
+              <option value="countered"    ${r==='countered'?'selected':''}>Countered</option>
+              <option value="accepted"     ${r==='accepted'?'selected':''}>Accepted ✓</option>
+              <option value="fell_through" ${r==='fell_through'?'selected':''}>Fell through after agreement</option>
+            </select>
+          </label>
+        </div>
+        <div id="offerCounterWrap_${l.id}" class="${showCounter ? '' : 'hidden'}">
+          <label class="block">
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Counter amount</span>
+            <input id="counterAmount_${l.id}" type="number" min="0" step="500" value="${l.counter_amount || ''}"
+              class="mt-1 w-full bg-ink-900 border border-ink-700 rounded-lg px-2 py-1.5 text-slate-200 focus:border-amber-500 focus:outline-none"
+              placeholder="What did they counter at?" />
+          </label>
+        </div>
+        <div id="offerClosedWrap_${l.id}" class="${showClosed ? '' : 'hidden'}">
+          <label class="block">
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Closed price</span>
+            <input id="closedPrice_${l.id}" type="number" min="0" step="500" value="${l.closed_price || ''}"
+              class="mt-1 w-full bg-ink-900 border border-ink-700 rounded-lg px-2 py-1.5 text-slate-200 focus:border-emerald-500 focus:outline-none"
+              placeholder="Final purchase price" />
+          </label>
+        </div>
+        <label class="block">
+          <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Outcome notes</span>
+          <textarea id="outcomeNotes_${l.id}" rows="2"
+            class="mt-1 w-full bg-ink-900 border border-ink-700 rounded-lg px-2 py-1.5 text-slate-200 focus:border-cyan-500 focus:outline-none resize-none"
+            placeholder="Brief note: what happened, any context for the next deal">${escape(l.outcome_notes || '')}</textarea>
+        </label>
+        <div class="flex items-center gap-2 pt-1">
+          <button id="saveOfferBtn_${l.id}" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium">Save</button>
+          <span id="saveOfferStatus_${l.id}" class="text-xs text-slate-500"></span>
+          ${sent ? `<span class="ml-auto text-[9px] text-slate-500">first sent ${sent}${closed ? ' · closed ' + closed : ''}</span>` : ''}
+        </div>
+      </div>
+    </details>
+  `
+}
+
+async function saveOffer(leadId) {
+  const $ = (id) => document.getElementById(id + '_' + leadId)
+  const amount   = parseFloat($('offerAmount').value) || null
+  const response = $('offerResponse').value || null
+  const counter  = parseFloat($('counterAmount').value) || null
+  const closed   = parseFloat($('closedPrice').value) || null
+  const notes    = $('outcomeNotes').value.trim() || null
+  const status   = $('saveOfferStatus')
+
+  // Find the existing lead to compare against (decide if offer_sent_at / closed_at need stamping)
+  const lead = leads.find(x => x.id === leadId)
+  const wasJustSent = amount && !lead?.offer_sent_at
+  const wasJustClosed = closed && !lead?.closed_at
+
+  const patch = {
+    offer_amount: amount,
+    offer_response: response,
+    counter_amount: counter,
+    closed_price: closed,
+    outcome_notes: notes,
+  }
+  if (wasJustSent) patch.offer_sent_at = new Date().toISOString()
+  if (wasJustClosed) patch.closed_at = new Date().toISOString()
+
+  status.textContent = 'saving…'
+  status.className = 'text-xs text-slate-500'
+  const { error } = await sb.from('leads').update(patch).eq('id', leadId)
+  if (error) {
+    status.textContent = 'error: ' + error.message
+    status.className = 'text-xs text-rose-300'
+    return
+  }
+  // Update local cache so re-renders are consistent
+  if (lead) Object.assign(lead, patch)
+  status.textContent = '✓ saved'
+  status.className = 'text-xs text-emerald-400'
+  setTimeout(() => { status.textContent = '' }, 2500)
+}
+
+function bindOfferForm(leadId) {
+  const $ = (id) => document.getElementById(id + '_' + leadId)
+  const respSel = $('offerResponse')
+  const counterWrap = $('offerCounterWrap')
+  const closedWrap = $('offerClosedWrap')
+  const saveBtn = $('saveOfferBtn')
+  if (respSel) {
+    respSel.addEventListener('change', (e) => {
+      const v = e.target.value
+      if (counterWrap) counterWrap.classList.toggle('hidden', v !== 'countered')
+      if (closedWrap)  closedWrap.classList.toggle('hidden', v !== 'accepted' && v !== 'fell_through')
+    })
+  }
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => saveOffer(leadId))
+  }
 }
 
 function renderDealSection(l) {
