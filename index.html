@@ -1611,12 +1611,12 @@ function renderDealSection(l) {
   // walk-up max = wholesale_offer (75% of as-is)
   // hard ceiling = rehabber MAO (suggested_offer)
   // Prefer buddy's authoritative starting_offer column if present, else compute 60% of MAO client-side
-  const firstOffer = d.starting_offer ?? (offer ? Math.round(offer * 0.60) : null)
-  const ceiling    = offer || null
-  // walk-up max = 85% of rehabber MAO. Sits cleanly between firstOffer (60% of MAO)
-  // and ceiling (100% of MAO), so the ladder always ascends. wholesale_offer
-  // (75% of as-is) is structurally higher than ceiling on every property,
-  // so we keep it as a reference value in the underlying-numbers section instead.
+  // Ladder anchored on wholesale_offer (= 0.75 * as_is), empirically validated
+  // against Omel's actual wholesale buy:sell ratio of 0.78 (n=5 quick flips
+  // held <90 days, 2019-2022). The rehabber MAO (suggested_offer) is shown
+  // separately in backing math as a competitor reference, not the ceiling.
+  const ceiling    = wOffer || null
+  const firstOffer = d.starting_offer ?? (ceiling ? Math.round(Number(ceiling) * 0.60) : null)
   const walkUp     = ceiling != null ? Math.round(Number(ceiling) * 0.85) : null
   const ladderHtml = (firstOffer || walkUp || ceiling)
     ? `<div class="mt-3">
@@ -1642,21 +1642,28 @@ function renderDealSection(l) {
       </div>` : ''
 
   // Underlying model numbers (collapsed below the ladder for reference)
-  const econHtml = (arv || rehab || offer)
+  // Surface rehabber MAO (suggested_offer) as a competitor-reference value —
+  // it tells you what a rehabber thinks the property is worth, useful when
+  // deciding whether to hold the line on negotiations.
+  const econHtml = (arv || rehab || offer || asIs)
     ? `<div class="mt-3">
         <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">📊 Underlying numbers</div>
-        <div class="grid grid-cols-3 gap-2">
+        <div class="grid grid-cols-4 gap-2">
           <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
             <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">ARV</div>
-            <div class="text-base font-bold text-slate-200 mt-0.5">${arv ? '$' + Number(arv).toLocaleString() : '—'}</div>
+            <div class="text-sm font-bold text-slate-200 mt-0.5">${arv ? '$' + Number(arv).toLocaleString() : '—'}</div>
           </div>
           <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
             <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Rehab est</div>
-            <div class="text-base font-bold text-amber-300 mt-0.5">${rehab ? '$' + Number(rehab).toLocaleString() : '—'}</div>
+            <div class="text-sm font-bold text-amber-300 mt-0.5">${rehab ? '$' + Number(rehab).toLocaleString() : '—'}</div>
           </div>
           <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
             <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">As-is${sourceLabel ? ` · ${sourceLabel}` : ''}</div>
-            <div class="text-base font-bold text-slate-200 mt-0.5">${asIs ? '$' + Number(asIs).toLocaleString() : '—'}</div>
+            <div class="text-sm font-bold text-slate-200 mt-0.5">${asIs ? '$' + Number(asIs).toLocaleString() : '—'}</div>
+          </div>
+          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5" title="What a rehabber would max-pay using ARV*0.7 - rehab. Shown as a competitor reference, not your ceiling.">
+            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Rehabber MAO</div>
+            <div class="text-sm font-bold text-slate-400 mt-0.5">${offer ? '$' + Number(offer).toLocaleString() : '—'}</div>
           </div>
         </div>
       </div>` : ''
