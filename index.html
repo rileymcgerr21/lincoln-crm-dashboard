@@ -22,29 +22,75 @@
   }
 </script>
 <style>
+  /* Emil-style custom easings — stronger than CSS defaults */
+  :root {
+    --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);          /* punchy ease-out for UI */
+    --ease-in-out:   cubic-bezier(0.77, 0, 0.175, 1);         /* on-screen movement */
+    --ease-drawer:   cubic-bezier(0.32, 0.72, 0, 1);          /* iOS drawer feel */
+  }
+
   html, body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11'; }
-  body { background: radial-gradient(ellipse at top, #0f1530 0%, #070912 60%) fixed; }
+  body { background: radial-gradient(ellipse at top, #0f1530 0%, #070912 60%) fixed; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+  /* Global press feedback — buttons must feel responsive */
+  button { transition: transform 80ms var(--ease-out), background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), opacity 120ms var(--ease-out); }
+  button:active:not(:disabled) { transform: scale(0.97); }
+  /* Larger interactive surfaces (tiles, lead rows) get a softer scale */
+  .stat-tile:active, [data-id]:active { transform: scale(0.995); }
+
+  /* Side panel — iOS-style drawer curve */
+  #panel { transition: transform 280ms var(--ease-drawer) !important; }
   .panel-enter { transform: translateX(100%); }
   .panel-active { transform: translateX(0); }
-  select { background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3aacb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.5rem center; padding-right: 1.75rem; appearance: none; }
+
+  /* Overlay backdrop — fade instead of snap.
+     Override Tailwind's .hidden { display:none } so the transition can run. */
+  #overlay { opacity: 0; pointer-events: none; transition: opacity 180ms var(--ease-out); }
+  #overlay.hidden { display: block; opacity: 0; pointer-events: none; }
+  #overlay:not(.hidden) { opacity: 1; pointer-events: auto; }
+
+  /* Faster spinner — perceived performance */
+  @keyframes lcrm-spin { to { transform: rotate(360deg); } }
+  .animate-spin { animation: lcrm-spin 700ms linear infinite !important; }
+
+  select { background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3aacb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.5rem center; padding-right: 1.75rem; appearance: none; transition: border-color 120ms var(--ease-out); }
+  select:focus { outline: none; border-color: rgb(99 102 241); }
+
   /* Photo fallback */
   .photo-fallback { background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(99,102,241,0.02)); }
-  /* Sidebar nav */
-  .nav-item { transition: all 120ms ease; }
+
+  /* Sidebar nav — specific properties only */
+  .nav-item { transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out); }
   .nav-item.active { background-color: rgb(99 102 241 / 0.15); color: rgb(199 210 254); }
   .nav-item.active::before { content: ''; position: absolute; left: 0; top: 0.5rem; bottom: 0.5rem; width: 3px; background: rgb(129 140 248); border-radius: 0 2px 2px 0; }
+
   /* Stack dot */
   .stack-dot { width: 0.5rem; height: 0.5rem; border-radius: 9999px; display: inline-block; box-shadow: 0 0 0 1.5px rgb(7 9 18); }
-  /* Tile gradient sheen */
-  .stat-tile { position: relative; overflow: hidden; }
+
+  /* Lead row — gentle hover lift, only animate the things that actually change */
+  [data-id] { transition: border-color 150ms var(--ease-out), background-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out), transform 80ms var(--ease-out); }
+  [data-id]:hover { box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.4); }
+
+  /* Stat tiles — lift + accent shadow on hover */
+  .stat-tile { position: relative; overflow: hidden; transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out), transform 80ms var(--ease-out); }
   .stat-tile::after { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 60%); pointer-events: none; }
+  .stat-tile:hover { box-shadow: 0 6px 16px -4px rgb(0 0 0 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.04); }
+
+  /* Quickfilter chips — specific transition */
+  .quickfilter-chip, .tag-chip { transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), color 150ms var(--ease-out), transform 80ms var(--ease-out); }
+
+  /* Inputs — focused border animation */
+  input[type="text"], input[type="email"], input[type="search"], textarea { transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out); }
+
+  /* Score badge — soft entry */
+  @keyframes lcrm-pop { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+  [data-id] .px-2.py-0\.5.rounded-md { animation: lcrm-pop 180ms var(--ease-out) both; }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: #070912; }
   ::-webkit-scrollbar-thumb { background: #1a1f3a; border-radius: 8px; border: 2px solid #070912; }
   ::-webkit-scrollbar-thumb:hover { background: #262b4a; }
-  /* Subtle text rendering */
-  body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 </style>
 </head>
 <body class="text-slate-100">
@@ -469,7 +515,7 @@ async function loadLeads() {
     sb.from('v_lead_worklist').select('id, deal_score_v2, deal_score_tier, deal_flags').limit(15000),
     sb.from('v_top_deals').select(
       'lead_id, arv_estimate, rehab_estimate, suggested_offer, ' +
-      'as_is_estimate, wholesale_offer, wholesale_margin, nbh_comps_used, pricing_source, starting_offer, ' +
+      'as_is_estimate, wholesale_offer, wholesale_margin, nbh_comps_used, pricing_source, ' +
       'owner_is_known_flipper, flipper_operator, is_tax_delinquent, is_out_of_state, is_pro_owner, ' +
       'owner_property_count, last_sale_year, tax_owed'
     ).not('lead_id', 'is', null).limit(15000)
@@ -504,9 +550,9 @@ async function loadLeads() {
         as_is_estimate:         econ?.as_is_estimate ?? null,
         wholesale_offer:        econ?.wholesale_offer ?? null,
         wholesale_margin:       econ?.wholesale_margin ?? null,
+        starting_offer:         econ?.starting_offer ?? null,
         nbh_comps_used:         econ?.nbh_comps_used ?? null,
         pricing_source:         econ?.pricing_source ?? null,
-        starting_offer:         econ?.starting_offer ?? null,
         owner_is_known_flipper: econ?.owner_is_known_flipper ?? null,
         flipper_operator:       econ?.flipper_operator ?? null,
         is_tax_delinquent:      econ?.is_tax_delinquent ?? null,
@@ -1003,7 +1049,7 @@ window.closePanel = () => {
   const p = document.getElementById('panel')
   const o = document.getElementById('overlay')
   p.classList.remove('panel-active'); p.classList.add('panel-enter')
-  setTimeout(() => { p.classList.add('hidden'); o.classList.add('hidden') }, 200)
+  setTimeout(() => { p.classList.add('hidden'); o.classList.add('hidden') }, 280)
 }
 
 const STAGE_TRANSITIONS = [
@@ -1271,7 +1317,7 @@ async function loadOwnerPortfolio(l) {
       sb.from('distress_analysis').select('overall_distress_score, notes').eq('qref', qref).maybeSingle(),
       sb.from('v_top_deals').select(
         'qref, deal_score_v2, deal_score_tier, deal_flags, arv_estimate, rehab_estimate, suggested_offer, ' +
-        'as_is_estimate, wholesale_offer, wholesale_margin, nbh_comps_used, pricing_source, starting_offer, ' +
+        'as_is_estimate, wholesale_offer, wholesale_margin, nbh_comps_used, pricing_source, ' +
         'owner_is_known_flipper, flipper_operator, is_tax_delinquent, is_out_of_state, is_pro_owner, ' +
         'owner_property_count, last_sale_year, tax_owed'
       ).eq('qref', qref).maybeSingle(),
@@ -1290,9 +1336,9 @@ async function loadOwnerPortfolio(l) {
         as_is_estimate:   econ.as_is_estimate ?? null,
         wholesale_offer:  econ.wholesale_offer ?? null,
         wholesale_margin: econ.wholesale_margin ?? null,
+        starting_offer:   econ.starting_offer ?? null,
         nbh_comps_used:   econ.nbh_comps_used ?? null,
         pricing_source:   econ.pricing_source ?? null,
-        starting_offer:   econ.starting_offer ?? null,
         owner_is_known_flipper: econ.owner_is_known_flipper ?? null,
         flipper_operator:       econ.flipper_operator ?? null,
         is_tax_delinquent:      econ.is_tax_delinquent ?? null,
@@ -1523,57 +1569,100 @@ function renderDealSection(l) {
     ? flags.map(f => `<span class="text-xs px-2 py-1 rounded-md ${f.cls}">${escape(f.label)}</span>`).join(' ')
     : '<span class="text-xs text-slate-500">No flags</span>'
 
-  // Backing economics
+  // Rehab-flipper economics (kept for comparison)
   const arv      = d.arv_estimate
   const rehab    = d.rehab_estimate
-  const ceiling  = d.suggested_offer        // rehabber MAO — hard walk-away
-  const opening  = d.starting_offer         // 60% of MAO — first cold offer
+  const offer    = d.suggested_offer
+  // Wholesale economics (your model — buy at 75% of as-is, sell as-is)
   const asIs     = d.as_is_estimate
   const wOffer   = d.wholesale_offer
+  const wMargin  = d.wholesale_margin
   const nbhN     = d.nbh_comps_used
   const pSource  = d.pricing_source
-  // Walk-up max = 85% of rehabber MAO (negotiation stretch — between opening and ceiling)
-  const walkUp   = ceiling != null ? Math.round(Number(ceiling) * 0.85) : null
   const sourceLabel = pSource === 'nbh_specific' ? `${nbhN || 0} nbh comps`
                     : pSource === 'nbh_thin'     ? `thin (${nbhN || 0})`
                     : pSource === 'city_wide'    ? 'city-wide fallback'
                     : ''
 
-  // The negotiation ladder — three ascending numbers from MAO
-  const ladderHtml = (opening || walkUp || ceiling)
+  const wholesaleHtml = (asIs || wOffer || wMargin)
     ? `<div class="mt-3">
-        <div class="text-[10px] font-bold uppercase tracking-wider text-cyan-300 mb-1.5">Negotiation ladder</div>
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Your wholesale numbers</div>
+          ${sourceLabel ? `<div class="text-[9px] text-slate-500">${escape(sourceLabel)}</div>` : ''}
+        </div>
         <div class="grid grid-cols-3 gap-2">
-          <div class="bg-cyan-500/15 border border-cyan-500/40 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-cyan-300 font-semibold">Opening</div>
-            <div class="text-base font-black text-cyan-200 mt-0.5">${opening ? '$' + Number(opening).toLocaleString() : '—'}</div>
-            <div class="text-[9px] text-cyan-400/70 mt-0.5">60% of MAO · anchor low</div>
+          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">As-is value</div>
+            <div class="text-base font-bold text-slate-200 mt-0.5">${asIs ? '$' + Number(asIs).toLocaleString() : '—'}</div>
           </div>
-          <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-amber-300 font-semibold">Walk-up max</div>
-            <div class="text-base font-bold text-amber-200 mt-0.5">${walkUp ? '$' + Number(walkUp).toLocaleString() : '—'}</div>
-            <div class="text-[9px] text-amber-400/70 mt-0.5">85% of MAO · stretch</div>
+          <div class="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-cyan-400 font-semibold">Your offer (75%)</div>
+            <div class="text-base font-black text-cyan-300 mt-0.5">${wOffer ? '$' + Number(wOffer).toLocaleString() : '—'}</div>
           </div>
-          <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-red-300 font-semibold">Hard walk-away</div>
-            <div class="text-base font-bold text-red-200 mt-0.5">${ceiling ? '$' + Number(ceiling).toLocaleString() : '—'}</div>
-            <div class="text-[9px] text-red-400/70 mt-0.5">rehabber MAO · never above</div>
+          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Margin</div>
+            <div class="text-base font-bold text-emerald-300 mt-0.5">${wMargin ? '$' + Number(wMargin).toLocaleString() : '—'}</div>
           </div>
         </div>
       </div>` : ''
 
-  // Backing math row — small, informational
-  const backingParts = []
-  if (arv)    backingParts.push(`ARV $${Number(arv).toLocaleString()}`)
-  if (asIs)   backingParts.push(`As-is $${Number(asIs).toLocaleString()}`)
-  if (rehab)  backingParts.push(`Rehab $${Number(rehab).toLocaleString()}`)
-  if (wOffer) backingParts.push(`Wholesale stretch $${Number(wOffer).toLocaleString()}`)
-  if (sourceLabel) backingParts.push(sourceLabel)
-  const backingHtml = backingParts.length
-    ? `<div class="mt-2 text-[10px] text-slate-500">${backingParts.map(escape).join(' · ')}</div>`
-    : ''
+  // Negotiation ladder: first offer (anchor) → walk-up max → hard ceiling.
+  // first offer = 60% of rehabber MAO  (will switch to deal_rankings.starting_offer when buddy ships it)
+  // walk-up max = wholesale_offer (75% of as-is)
+  // hard ceiling = rehabber MAO (suggested_offer)
+  // Prefer buddy's authoritative starting_offer column if present, else compute 60% of MAO client-side
+  const firstOffer = d.starting_offer ?? (offer ? Math.round(offer * 0.60) : null)
+  const ceiling    = offer || null
+  // walk-up max = 85% of rehabber MAO. Sits cleanly between firstOffer (60% of MAO)
+  // and ceiling (100% of MAO), so the ladder always ascends. wholesale_offer
+  // (75% of as-is) is structurally higher than ceiling on every property,
+  // so we keep it as a reference value in the underlying-numbers section instead.
+  const walkUp     = ceiling != null ? Math.round(Number(ceiling) * 0.85) : null
+  const ladderHtml = (firstOffer || walkUp || ceiling)
+    ? `<div class="mt-3">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-1.5">📈 Negotiation Ladder · what to actually offer</div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="bg-emerald-500/15 border border-emerald-500/40 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-emerald-400 font-bold">First offer</div>
+            <div class="text-lg font-black text-emerald-300 mt-0.5">${firstOffer ? '$' + Number(firstOffer).toLocaleString() : '—'}</div>
+            <div class="text-[9px] text-emerald-500/80 mt-0.5">your text/letter anchor</div>
+          </div>
+          <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-amber-400 font-bold">Walk-up max</div>
+            <div class="text-lg font-black text-amber-300 mt-0.5">${walkUp ? '$' + Number(walkUp).toLocaleString() : '—'}</div>
+            <div class="text-[9px] text-amber-500/80 mt-0.5">your stretch — still profitable</div>
+          </div>
+          <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-red-400 font-bold">Hard ceiling</div>
+            <div class="text-lg font-black text-red-300 mt-0.5">${ceiling ? '$' + Number(ceiling).toLocaleString() : '—'}</div>
+            <div class="text-[9px] text-red-500/80 mt-0.5">walk away above this</div>
+          </div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-1.5">Tip: text the first offer. Negotiate up to walk-up. Walk away if they push past ceiling.</div>
+      </div>` : ''
 
-  const econHtml = ladderHtml + backingHtml
+  // Underlying model numbers (collapsed below the ladder for reference)
+  const econHtml = (arv || rehab || offer)
+    ? `<div class="mt-3">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">📊 Underlying numbers</div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">ARV</div>
+            <div class="text-base font-bold text-slate-200 mt-0.5">${arv ? '$' + Number(arv).toLocaleString() : '—'}</div>
+          </div>
+          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Rehab est</div>
+            <div class="text-base font-bold text-amber-300 mt-0.5">${rehab ? '$' + Number(rehab).toLocaleString() : '—'}</div>
+          </div>
+          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
+            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">As-is${sourceLabel ? ` · ${sourceLabel}` : ''}</div>
+            <div class="text-base font-bold text-slate-200 mt-0.5">${asIs ? '$' + Number(asIs).toLocaleString() : '—'}</div>
+          </div>
+        </div>
+      </div>` : ''
+
+  // Combine: ladder is the primary CTA, underlying numbers below
+  const allHtml = ladderHtml + econHtml
 
   return `
     <div class="mb-5 p-4 bg-gradient-to-br from-indigo-900/20 to-ink-850 border border-indigo-500/20 rounded-xl">
@@ -1586,7 +1675,7 @@ function renderDealSection(l) {
       </div>
       <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Why it scores this way</div>
       <div class="flex flex-wrap gap-1.5">${flagsHtml}</div>
-      ${econHtml}
+      ${allHtml}
     </div>`
 }
 
