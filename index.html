@@ -285,7 +285,7 @@
               <option value="do_not_contact">Do not contact</option>
               <option value="bad_number">Bad number</option>
             </select>
-            <input id="bulkTag" type="text" placeholder="Add tag (Enter)…"
+            <input id="bulkTag" type="text" placeholder="Add to list, e.g. tax-delinquent-old (Enter)…"
                    class="px-2 py-1 bg-ink-850 border border-ink-700 rounded-lg w-40 text-slate-200 placeholder-slate-500 focus:border-indigo-500 focus:outline-none" />
             <button id="bulkClear" class="text-slate-500 hover:text-slate-200 px-2">Clear</button>
           </div>
@@ -585,12 +585,45 @@ async function loadLeads() {
 }
 
 function populateCohortDropdown() {
-  const counts = {}
-  for (const l of leads) for (const s of (l.lead_sources || [])) counts[s.source] = (counts[s.source] || 0) + 1
+  // Merge two sources of "list membership":
+  //   1. lead_sources (system cohorts: distressed_absentee, list_1, etc.)
+  //   2. leads.tags   (user-created lists like "tax delinquent old")
+  // Counted once per lead per name (a lead can be in both a system cohort
+  // and a user list, but should only count once toward each).
+  const sourceCounts = {}
+  const tagCounts = {}
+  for (const l of leads) {
+    const seenForLead = new Set()
+    for (const s of (l.lead_sources || [])) {
+      if (seenForLead.has(s.source)) continue
+      seenForLead.add(s.source)
+      sourceCounts[s.source] = (sourceCounts[s.source] || 0) + 1
+    }
+    for (const t of (l.tags || [])) {
+      if (seenForLead.has(t)) continue
+      seenForLead.add(t)
+      tagCounts[t] = (tagCounts[t] || 0) + 1
+    }
+  }
   const select = document.getElementById('cohortSelect')
-  select.innerHTML = `<option value="all">All cohorts (${leads.length})</option>` +
-    Object.entries(counts).sort((a,b) => b[1] - a[1])
-      .map(([src, n]) => `<option value="${escape(src)}">${escape(COHORT_LABEL[src] || src)} (${n})</option>`).join('')
+  const sourceEntries = Object.entries(sourceCounts).sort((a,b) => b[1] - a[1])
+  const tagEntries    = Object.entries(tagCounts).sort((a,b) => b[1] - a[1])
+  let html = `<option value="all">All cohorts (${leads.length})</option>`
+  if (sourceEntries.length) {
+    html += `<optgroup label="System cohorts">`
+    html += sourceEntries.map(([src, n]) =>
+      `<option value="src:${escape(src)}">${escape(COHORT_LABEL[src] || src)} (${n})</option>`
+    ).join('')
+    html += `</optgroup>`
+  }
+  if (tagEntries.length) {
+    html += `<optgroup label="My lists (tags)">`
+    html += tagEntries.map(([t, n]) =>
+      `<option value="tag:${escape(t)}">${escape(t)} (${n})</option>`
+    ).join('')
+    html += `</optgroup>`
+  }
+  select.innerHTML = html
   select.value = currentCohort
 }
 
@@ -670,7 +703,18 @@ function applyFilters() {
     if (currentView === 'inbox' && STAGE_BUCKET(l.current_stage) !== 'replied') return false
     if (currentView === 'tasks' && (!l.next_action || !isDueNow(l.next_action_due_at))) return false
     if (currentCohort !== 'all') {
-      if (!(l.lead_sources || []).some(s => s.source === currentCohort)) return false
+      // New prefixed format: src:NAME for lead_sources, tag:NAME for leads.tags
+      // Falls back to legacy bare-name matching against lead_sources for backward compat.
+      if (currentCohort.startsWith('tag:')) {
+        const t = currentCohort.slice(4)
+        if (!(l.tags || []).includes(t)) return false
+      } else if (currentCohort.startsWith('src:')) {
+        const s = currentCohort.slice(4)
+        if (!(l.lead_sources || []).some(x => x.source === s)) return false
+      } else {
+        // legacy fallback
+        if (!(l.lead_sources || []).some(x => x.source === currentCohort)) return false
+      }
     }
     if (currentStage !== 'all') {
       if (STAGE_BUCKET(l.current_stage) !== currentStage) return false
@@ -1989,7 +2033,7 @@ document.getElementById('bulkTag').addEventListener('keydown', async (e) => {
     l.tags = newTags
     await sb.from('leads').update({ tags: newTags }).eq('id', id)
   }
-  populateTagFilters(); applyFilters(); updateTotals()
+  populateCohortDropdown(); populateTagFilters(); applyFilters(); updateTotals()
 })
 document.getElementById('exportCsv').addEventListener('click', () => {
   const rows = selectedIds.size > 0 ? filtered.filter(l => selectedIds.has(l.id)) : filtered
