@@ -1826,55 +1826,20 @@ function renderDealSection(l) {
     ? ' <span class="text-[8px] px-1 py-0.5 rounded ' + (dev >= 35 ? 'bg-rose-500/30 text-rose-200' : 'bg-amber-500/30 text-amber-200') + ' ml-1">' + dev + '% Δ</span>'
     : ''
 
-  // Carry-cost panel: LOC interest at $62/day per $250K drawn x 30/60/90 days
-  const c30 = d.carry_cost_30d, c60 = d.carry_cost_60d, c90 = d.carry_cost_90d
-  const nm60 = d.net_margin_60d
-  const slowMarket = d.slow_market === true
-  const nbhSalesYr = d.nbh_recent_sale_count
-  const carryHtml = (c30 || c60 || c90)
-    ? `<div class="mt-3 p-3 bg-ink-950/40 border border-ink-700 rounded-lg">
-        <div class="flex items-center justify-between mb-2">
-          <div class="text-[10px] font-bold uppercase tracking-wider text-amber-300">⏱ LOC carry cost</div>
-          ${slowMarket ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-rose-500/30 text-rose-200 font-bold" title="Only ' + (nbhSalesYr || 0) + ' residential sales in this neighborhood last 12 months — budget for longer carry, require fatter margin.">⚠ slow market</span>' : '<span class="text-[9px] text-slate-500">' + (nbhSalesYr || 0) + ' nbh comps/yr</span>'}
-        </div>
-        <div class="grid grid-cols-4 gap-2 text-center">
-          <div class="bg-ink-900 border border-ink-800 rounded p-1.5">
-            <div class="text-[8px] uppercase tracking-wider text-slate-500">30 days</div>
-            <div class="text-xs font-bold text-amber-300">${c30 ? '$' + Number(c30).toLocaleString() : '—'}</div>
-          </div>
-          <div class="bg-ink-900 border border-ink-800 rounded p-1.5">
-            <div class="text-[8px] uppercase tracking-wider text-slate-500">60 days</div>
-            <div class="text-xs font-bold text-amber-300">${c60 ? '$' + Number(c60).toLocaleString() : '—'}</div>
-          </div>
-          <div class="bg-ink-900 border border-ink-800 rounded p-1.5">
-            <div class="text-[8px] uppercase tracking-wider text-slate-500">90 days</div>
-            <div class="text-xs font-bold text-amber-300">${c90 ? '$' + Number(c90).toLocaleString() : '—'}</div>
-          </div>
-          <div class="bg-emerald-500/10 border border-emerald-500/30 rounded p-1.5" title="Wholesale margin minus 60-day carry cost — your realistic net at typical hold time.">
-            <div class="text-[8px] uppercase tracking-wider text-emerald-400 font-bold">Net @ 60d</div>
-            <div class="text-xs font-black text-emerald-300">${nm60 ? '$' + Number(nm60).toLocaleString() : '—'}</div>
-          </div>
-        </div>
-      </div>` : ''
-
-  const econHtml = (arv || rehab || offer || asIs || compCheck)
-    ? carryHtml + `<div class="mt-3">
+  const econHtml = (arv || offer || asIs || compCheck)
+    ? `<div class="mt-3">
         <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">📊 Underlying numbers</div>
-        <div class="grid grid-cols-5 gap-2">
+        <div class="grid grid-cols-4 gap-2">
           <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
             <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">ARV</div>
             <div class="text-sm font-bold text-slate-200 mt-0.5">${arv ? '$' + Number(arv).toLocaleString() : '—'}</div>
           </div>
           <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Rehab est</div>
-            <div class="text-sm font-bold text-amber-300 mt-0.5">${rehab ? '$' + Number(rehab).toLocaleString() : '—'}</div>
-          </div>
-          <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
-            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">As-is (model)${sourceLabel ? ' · ' + sourceLabel : ''}</div>
+            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">As-is${sourceLabel ? ' · ' + sourceLabel : ''}</div>
             <div class="text-sm font-bold text-slate-200 mt-0.5">${asIs ? '$' + Number(asIs).toLocaleString() : '—'}</div>
           </div>
           <div class="${compClass} border rounded-lg p-2.5" title="${escape(compTooltip)}">
-            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">As-is (strata)${compBadge}</div>
+            <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Comps${compBadge}</div>
             <div class="text-sm font-bold text-slate-200 mt-0.5">${compCheck ? '$' + Number(compCheck).toLocaleString() : '—'}</div>
           </div>
           <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5" title="What a rehabber would max-pay using ARV*0.7 - rehab. Competitor reference, not your ceiling.">
