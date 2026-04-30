@@ -516,6 +516,9 @@ async function loadLeads() {
     sb.from('v_top_deals').select(
       'lead_id, arv_estimate, rehab_estimate, suggested_offer, ' +
       'as_is_estimate, wholesale_offer, wholesale_margin, nbh_comps_used, pricing_source, ' +
+      'starting_offer, as_is_comp_check, comp_check_n, comp_check_deviation_pct, ' +
+      'carry_cost_30d, carry_cost_60d, carry_cost_90d, net_margin_60d, ' +
+      'nbh_recent_sale_count, slow_market, ' +
       'owner_is_known_flipper, flipper_operator, is_tax_delinquent, is_out_of_state, is_pro_owner, ' +
       'owner_property_count, last_sale_year, tax_owed'
     ).not('lead_id', 'is', null).limit(15000)
@@ -554,6 +557,12 @@ async function loadLeads() {
         as_is_comp_check:       econ?.as_is_comp_check ?? null,
         comp_check_n:           econ?.comp_check_n ?? null,
         comp_check_deviation_pct: econ?.comp_check_deviation_pct ?? null,
+        carry_cost_30d:         econ?.carry_cost_30d ?? null,
+        carry_cost_60d:         econ?.carry_cost_60d ?? null,
+        carry_cost_90d:         econ?.carry_cost_90d ?? null,
+        net_margin_60d:         econ?.net_margin_60d ?? null,
+        nbh_recent_sale_count:  econ?.nbh_recent_sale_count ?? null,
+        slow_market:            econ?.slow_market ?? null,
         nbh_comps_used:         econ?.nbh_comps_used ?? null,
         pricing_source:         econ?.pricing_source ?? null,
         owner_is_known_flipper: econ?.owner_is_known_flipper ?? null,
@@ -1002,6 +1011,7 @@ function renderRow(l) {
         <span>${mail}</span>
         <span>${phone}</span>
         ${l.deal?.suggested_offer ? `<span class="text-emerald-400 font-semibold">→ offer $${Number(l.deal.suggested_offer).toLocaleString()}</span>` : ''}
+        ${l.deal?.slow_market === true ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-rose-500/30 text-rose-200 font-bold ml-1" title="Slow market — only ${l.deal.nbh_recent_sale_count || 0} nbh sales last 12mo. Carry cost risk.">⚠ slow</span>` : ''}
         ${l.deal?.is_tax_delinquent ? `<span class="text-orange-400">⚠ tax-del</span>` : ''}
         ${l.deal?.owner_is_known_flipper ? `<span class="text-fuchsia-400">⚠ flipper-owned</span>` : ''}
         ${l.is_in_blight_zone ? `<span class="text-red-300" title="Inside declared blight zone — TIF/abatement eligible">🏚 blight</span>` : ''}
@@ -1324,6 +1334,9 @@ async function loadOwnerPortfolio(l) {
       sb.from('v_top_deals').select(
         'qref, deal_score_v2, deal_score_tier, deal_flags, arv_estimate, rehab_estimate, suggested_offer, ' +
         'as_is_estimate, wholesale_offer, wholesale_margin, nbh_comps_used, pricing_source, ' +
+        'starting_offer, as_is_comp_check, comp_check_n, comp_check_deviation_pct, ' +
+        'carry_cost_30d, carry_cost_60d, carry_cost_90d, net_margin_60d, ' +
+        'nbh_recent_sale_count, slow_market, ' +
         'owner_is_known_flipper, flipper_operator, is_tax_delinquent, is_out_of_state, is_pro_owner, ' +
         'owner_property_count, last_sale_year, tax_owed'
       ).eq('qref', qref).maybeSingle(),
@@ -1346,6 +1359,12 @@ async function loadOwnerPortfolio(l) {
         as_is_comp_check: econ.as_is_comp_check ?? null,
         comp_check_n:     econ.comp_check_n ?? null,
         comp_check_deviation_pct: econ.comp_check_deviation_pct ?? null,
+        carry_cost_30d:   econ.carry_cost_30d ?? null,
+        carry_cost_60d:   econ.carry_cost_60d ?? null,
+        carry_cost_90d:   econ.carry_cost_90d ?? null,
+        net_margin_60d:   econ.net_margin_60d ?? null,
+        nbh_recent_sale_count: econ.nbh_recent_sale_count ?? null,
+        slow_market:      econ.slow_market ?? null,
         nbh_comps_used:   econ.nbh_comps_used ?? null,
         pricing_source:   econ.pricing_source ?? null,
         owner_is_known_flipper: econ.owner_is_known_flipper ?? null,
@@ -1807,8 +1826,39 @@ function renderDealSection(l) {
     ? ' <span class="text-[8px] px-1 py-0.5 rounded ' + (dev >= 35 ? 'bg-rose-500/30 text-rose-200' : 'bg-amber-500/30 text-amber-200') + ' ml-1">' + dev + '% Δ</span>'
     : ''
 
+  // Carry-cost panel: LOC interest at $62/day per $250K drawn x 30/60/90 days
+  const c30 = d.carry_cost_30d, c60 = d.carry_cost_60d, c90 = d.carry_cost_90d
+  const nm60 = d.net_margin_60d
+  const slowMarket = d.slow_market === true
+  const nbhSalesYr = d.nbh_recent_sale_count
+  const carryHtml = (c30 || c60 || c90)
+    ? `<div class="mt-3 p-3 bg-ink-950/40 border border-ink-700 rounded-lg">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-amber-300">⏱ LOC carry cost</div>
+          ${slowMarket ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-rose-500/30 text-rose-200 font-bold" title="Only ' + (nbhSalesYr || 0) + ' residential sales in this neighborhood last 12 months — budget for longer carry, require fatter margin.">⚠ slow market</span>' : '<span class="text-[9px] text-slate-500">' + (nbhSalesYr || 0) + ' nbh comps/yr</span>'}
+        </div>
+        <div class="grid grid-cols-4 gap-2 text-center">
+          <div class="bg-ink-900 border border-ink-800 rounded p-1.5">
+            <div class="text-[8px] uppercase tracking-wider text-slate-500">30 days</div>
+            <div class="text-xs font-bold text-amber-300">${c30 ? '$' + Number(c30).toLocaleString() : '—'}</div>
+          </div>
+          <div class="bg-ink-900 border border-ink-800 rounded p-1.5">
+            <div class="text-[8px] uppercase tracking-wider text-slate-500">60 days</div>
+            <div class="text-xs font-bold text-amber-300">${c60 ? '$' + Number(c60).toLocaleString() : '—'}</div>
+          </div>
+          <div class="bg-ink-900 border border-ink-800 rounded p-1.5">
+            <div class="text-[8px] uppercase tracking-wider text-slate-500">90 days</div>
+            <div class="text-xs font-bold text-amber-300">${c90 ? '$' + Number(c90).toLocaleString() : '—'}</div>
+          </div>
+          <div class="bg-emerald-500/10 border border-emerald-500/30 rounded p-1.5" title="Wholesale margin minus 60-day carry cost — your realistic net at typical hold time.">
+            <div class="text-[8px] uppercase tracking-wider text-emerald-400 font-bold">Net @ 60d</div>
+            <div class="text-xs font-black text-emerald-300">${nm60 ? '$' + Number(nm60).toLocaleString() : '—'}</div>
+          </div>
+        </div>
+      </div>` : ''
+
   const econHtml = (arv || rehab || offer || asIs || compCheck)
-    ? `<div class="mt-3">
+    ? carryHtml + `<div class="mt-3">
         <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">📊 Underlying numbers</div>
         <div class="grid grid-cols-5 gap-2">
           <div class="bg-ink-950/40 border border-ink-700 rounded-lg p-2.5">
