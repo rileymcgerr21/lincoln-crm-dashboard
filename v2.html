@@ -634,6 +634,14 @@ async function loadComps(p) {
     c.on = Math.abs(c.sqft - sqft) / sqft <= 0.25 && (!yb || !c.year_built || Math.abs(c.year_built - yb) <= 15)
   })
   if (comps.filter(c => c.on).length < 3) comps.forEach(c => { if (Math.abs(c.sqft - sqft) / sqft <= 0.40) c.on = true })
+  // IAAO-style outlier trim: auto-veto comps whose $/sqft falls outside
+  // 1.5×IQR of the selected set (kept visible — re-check to override).
+  const sel = comps.filter(c => c.on).map(c => c.psf).sort((a, b) => a - b)
+  if (sel.length >= 5) {
+    const q1 = sel[Math.floor(sel.length * 0.25)], q3 = sel[Math.floor(sel.length * 0.75)]
+    const lo = q1 - 1.5 * (q3 - q1), hi = q3 + 1.5 * (q3 - q1)
+    comps.forEach(c => { if (c.on && (c.psf < lo || c.psf > hi)) { c.on = false; c.trimmed = true } })
+  }
 
   compState = { comps, sqft, nbh: p.neighborhood, anchor: p.current_assessed_val ? Number(p.current_assessed_val) / 0.90 : null }
   renderComps()
@@ -653,13 +661,24 @@ function renderComps() {
   const p75 = psfs.length ? psfs[Math.floor(psfs.length * 0.75)] : null
   const est = med ? med * sqft : null
 
-  // Agreement check: comps are the human cross-check on the anchor.
+  // Agreement check vs the anchor + IAAO confidence bands.
+  // COD = mean absolute % deviation of comp $/sqft around the median; per IAAO
+  // ratio-study standards, ≤15 is acceptable uniformity for older/mixed
+  // neighborhoods (≤10 = homogeneous-area grade). <5 comps = poor reliability.
   let agree = ''
-  if (est && anchor && on.length >= 4) {
+  if (on.length < 5) {
+    agree = `<span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 font-bold">thin comp set (${on.length}) — the anchor rules here</span>`
+  } else if (est && anchor) {
+    const cod = med ? Math.round(psfs.reduce((s, v) => s + Math.abs(v - med) / med, 0) / psfs.length * 100) : null
+    const codChip = cod != null
+      ? (cod <= 15
+        ? `<span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold" title="COD = comp dispersion. IAAO: ≤15 acceptable for older/mixed areas, ≤10 homogeneous-grade.">COD ${cod} ✓</span>`
+        : `<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-bold" title="Comps are scattered (IAAO acceptable is ≤15) — weak cross-check, trust the anchor.">COD ${cod} — scattered</span>`)
+      : ''
     const dev = Math.abs(est - anchor) / anchor
-    agree = dev <= 0.15
+    agree = (dev <= 0.15
       ? `<span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">✓ comps agree with anchor (${dev <= 0.075 ? 'tight' : Math.round(dev * 100) + '% off'})</span>`
-      : `<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-bold">⚠ comps ${est > anchor ? 'above' : 'below'} anchor by ${Math.round(dev * 100)}% — eyeball before offering</span>`
+      : `<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-bold">⚠ comps ${est > anchor ? 'above' : 'below'} anchor by ${Math.round(dev * 100)}% — eyeball before offering</span>`) + ' ' + codChip
   }
 
   body.innerHTML = `
@@ -677,6 +696,7 @@ function renderComps() {
         <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg ${c.on ? 'bg-slate-50' : 'opacity-45'} hover:bg-slate-100 cursor-pointer">
           <input type="checkbox" data-comp="${c.idx}" ${c.on ? 'checked' : ''} class="w-3.5 h-3.5 rounded border-slate-300 accent-slate-900">
           <span class="flex-1 min-w-0 text-[13px] text-slate-700 truncate">${escape(c.site_address || '')}</span>
+          ${c.trimmed && !c.on ? '<span class="text-[9px] px-1 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200 font-bold shrink-0" title="$/sqft outside 1.5×IQR of the comp set (IAAO outlier rule) — re-check to include anyway">outlier</span>' : ''}
           <span class="text-[12px] text-slate-400 shrink-0">${c.sqft ? Number(c.sqft).toLocaleString() + 'sf' : ''} ${c.year_built ? '· ' + c.year_built : ''} ${isNaN(c.d) ? '' : '· ' + c.d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}</span>
           <span class="text-[13px] font-bold text-slate-900 shrink-0 w-20 text-right">${money(c.sale_price)}</span>
           <span class="text-[11px] text-slate-400 shrink-0 w-14 text-right">$${Math.round(c.psf)}/sf</span>
