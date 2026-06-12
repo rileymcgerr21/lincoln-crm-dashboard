@@ -146,6 +146,10 @@
         <span class="text-base">📞</span> <span class="font-medium">Today's Tasks</span>
         <span id="tasksBadge" class="ml-auto text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full font-semibold hidden"></span>
       </button>
+      <button class="nav-item relative w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-ink-850 flex items-center gap-2.5 text-slate-300" data-view="mail">
+        <span class="text-base">📬</span> <span class="font-medium">Mailing Stack</span>
+        <span id="mailBadge" class="ml-auto text-[10px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded-full font-semibold hidden"></span>
+      </button>
       <button class="nav-item relative w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-ink-850 flex items-center gap-2.5 text-slate-300" data-view="stats">
         <span class="text-base">📊</span> <span class="font-medium">Stats</span>
       </button>
@@ -262,6 +266,18 @@
         <button data-quickfilter="lmi"      class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-slate-700/40 text-slate-300 border border-slate-600/40 hover:bg-slate-700/60" title="Low/Moderate-Income census tract">LMI <span class="opacity-60 ml-1" data-count="lmi"></span></button>
         <button data-quickfilter="tif"      class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20" title="Inside a Core TIF (Tax Increment Financing) area">TIF <span class="opacity-60 ml-1" data-count="tif"></span></button>
         <span id="tagFilters" class="flex items-center gap-1.5 flex-wrap"></span>
+      </div>
+
+      <!-- Mailing Stack batch bar (only visible in Mailing Stack view) -->
+      <div id="mailBar" class="hidden mt-3 pt-3 border-t border-ink-800">
+        <div id="mailBatchChips" class="flex items-center gap-1.5 flex-wrap"></div>
+        <div class="mt-2.5 flex items-center justify-between gap-3 flex-wrap text-sm">
+          <span id="mailBatchSummary" class="text-xs text-slate-400"></span>
+          <div class="flex items-center gap-2">
+            <button id="mailExportBtn" class="px-3 py-1.5 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/40 rounded-lg text-cyan-200 font-medium transition">⤓ Export batch CSV</button>
+            <button id="mailMarkSentBtn" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white font-medium transition">✓ Mark batch as mailed</button>
+          </div>
+        </div>
       </div>
 
       <!-- Bulk action toolbar -->
@@ -438,6 +454,8 @@ let searchTerm = ''
 let session = null
 let selectedIds = new Set()
 let currentView = 'leads'
+let currentBatch = 1          // Mailing Stack batch filter ('all' or 1..N)
+let stackById = new Map()     // lead_id → mailing_stack row
 
 const SV_KEY = 'lincoln_crm_saved_views_v1'
 const loadSavedViews = () => { try { return JSON.parse(localStorage.getItem(SV_KEY) || '[]') } catch { return [] } }
@@ -498,7 +516,7 @@ async function loadLeads() {
   //   3. v_top_deals — ARV / rehab / suggested_offer + extra flag booleans
   // We merge by lead id. v_lead_worklist is the source of truth for the score
   // so when buddy updates v2, our display and sort move with it automatically.
-  const [leadsRes, worklistRes, dealsRes] = await Promise.all([
+  const [leadsRes, worklistRes, dealsRes, stackRes] = await Promise.all([
     sb.from('leads').select(`
       id, owner_first_name, owner_last_name, owner_full_name, owner_entity_name,
       parcel_id_primary, property_address, property_zip,
@@ -522,7 +540,8 @@ async function loadLeads() {
       'nbh_recent_sale_count, slow_market, ' +
       'owner_is_known_flipper, flipper_operator, is_tax_delinquent, is_out_of_state, is_pro_owner, ' +
       'owner_property_count, last_sale_year, tax_owed'
-    ).not('lead_id', 'is', null).limit(15000)
+    ).not('lead_id', 'is', null).limit(15000),
+    sb.from('mailing_stack').select('*').limit(6000)
   ])
 
   if (leadsRes.error) {
@@ -536,12 +555,15 @@ async function loadLeads() {
   if (worklistRes.data) for (const w of worklistRes.data) v2ById.set(w.id, w)
   const econById = new Map()
   if (dealsRes.data) for (const d of dealsRes.data) econById.set(d.lead_id, d)
+  stackById = new Map()
+  if (stackRes?.data) for (const s of stackRes.data) stackById.set(s.lead_id, s)
 
   leads = (leadsRes.data || []).map(l => {
     const v2 = v2ById.get(l.id)
     const econ = econById.get(l.id)
     return {
       ...l,
+      stack: stackById.get(l.id) || null,
       // `deal` is the unified shape the rest of the app uses.
       // Score / tier / flags come from v_lead_worklist (v2). Economics come from v_top_deals.
       deal: (v2 || econ) ? {
@@ -691,6 +713,12 @@ function updateTotals() {
   const dueCount = counts.due_now
   if (dueCount > 0) { tasksBadge.textContent = dueCount; tasksBadge.classList.remove('hidden') }
   else tasksBadge.classList.add('hidden')
+
+  // Mailing Stack badge — letters not yet mailed in round 1
+  const mailBadge = document.getElementById('mailBadge')
+  const unmailed = leads.filter(l => l.stack && l.stack.letters_sent === 0).length
+  if (unmailed > 0) { mailBadge.textContent = unmailed.toLocaleString(); mailBadge.classList.remove('hidden') }
+  else mailBadge.classList.add('hidden')
   document.querySelectorAll('[data-count]').forEach(el => {
     const k = el.dataset.count
     el.textContent = counts[k] != null ? `(${counts[k]})` : ''
@@ -703,6 +731,10 @@ function applyFilters() {
   filtered = leads.filter(l => {
     if (currentView === 'inbox' && STAGE_BUCKET(l.current_stage) !== 'replied') return false
     if (currentView === 'tasks' && (!l.next_action || !isDueNow(l.next_action_due_at))) return false
+    if (currentView === 'mail') {
+      if (!l.stack) return false
+      if (currentBatch !== 'all' && l.stack.batch_no !== currentBatch) return false
+    }
     if (currentCohort !== 'all') {
       // New prefixed format: src:NAME for lead_sources, tag:NAME for leads.tags
       // Falls back to legacy bare-name matching against lead_sources for backward compat.
@@ -746,16 +778,21 @@ function applyFilters() {
       for (const t of activeTags) if (!ts.has(t)) return false
     }
     if (searchTerm) {
-      const hay = [l.owner_full_name, l.owner_entity_name, l.property_address, l.mailing_city, l.parcel_id_primary, ...(l.tags || [])]
+      // Caller lookup: name / address / mailing address / parcel / tag / email,
+      // plus digit-matching on phone numbers (type any 4+ digits of the caller ID).
+      const hay = [l.owner_full_name, l.owner_entity_name, l.property_address, l.mailing_address, l.mailing_city, l.parcel_id_primary, l.email, ...(l.tags || [])]
         .filter(Boolean).join(' ').toLowerCase()
-      if (!hay.includes(searchTerm)) return false
+      const digits = searchTerm.replace(/\D/g, '')
+      const phoneDigits = (String(l.primary_phone || '') + String(l.secondary_phone || '')).replace(/\D/g, '')
+      if (!hay.includes(searchTerm) && !(digits.length >= 4 && phoneDigits.includes(digits))) return false
     }
     return true
   })
-  filtered.sort(SORT_FNS[currentSort] || SORT_FNS.score)
+  filtered.sort(currentView === 'mail' ? SORT_FNS.mail_rank : (SORT_FNS[currentSort] || SORT_FNS.deal))
   renderList()
 }
 const SORT_FNS = {
+  mail_rank:       (a, b) => (a.stack?.rank ?? Infinity) - (b.stack?.rank ?? Infinity),
   deal:            (a, b) => (b.deal?.score ?? -1) - (a.deal?.score ?? -1) || (b.distress_score || 0) - (a.distress_score || 0),
   suggested_offer: (a, b) => (b.deal?.suggested_offer ?? -1) - (a.deal?.suggested_offer ?? -1),
   distress:        (a, b) => (b.distress_score || 0) - (a.distress_score || 0) || (b.priority || 0) - (a.priority || 0),
@@ -811,8 +848,142 @@ function setView(view) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'))
   const btn = document.querySelector(`.nav-item[data-view="${view}"]`)
   if (btn) btn.classList.add('active')
+  const mailBar = document.getElementById('mailBar')
+  if (view === 'mail') { mailBar.classList.remove('hidden'); renderMailBar() }
+  else mailBar.classList.add('hidden')
   applyFilters()
 }
+
+// ─────── MAILING STACK ───────
+// The stack lives in the mailing_stack table: 5,000 mailboxes (deduped by
+// owner mailing address), heat-ranked, cut into 250-letter batches. Sent
+// letters are logged word-for-word in touches (channel='letter') so follow-up
+// letters can reference exactly what the person already received.
+function stackRows() { return leads.filter(l => l.stack) }
+
+function renderMailBar() {
+  const chipsWrap = document.getElementById('mailBatchChips')
+  const rows = stackRows()
+  const byBatch = new Map()
+  for (const l of rows) {
+    const b = l.stack.batch_no
+    if (!byBatch.has(b)) byBatch.set(b, { total: 0, mailed: 0 })
+    const e = byBatch.get(b); e.total++
+    if (l.stack.letters_sent > 0) e.mailed++
+  }
+  const batches = [...byBatch.keys()].sort((a, b) => a - b)
+  const chip = (val, label, extra = '') => {
+    const on = currentBatch === val
+    return `<button data-mailbatch="${val}" class="quickfilter-chip px-2.5 py-1 rounded-full text-xs font-medium ${on ? 'bg-cyan-600 text-white ring-2 ring-cyan-400 ring-offset-2 ring-offset-ink-900' : 'bg-ink-850 text-slate-300 hover:bg-ink-800 border border-ink-700'}">${label}${extra}</button>`
+  }
+  chipsWrap.innerHTML =
+    `<span class="text-slate-500 text-[10px] uppercase tracking-wider font-semibold mr-1">Batch</span>` +
+    chip('all', 'All', ` <span class="opacity-60">(${rows.length})</span>`) +
+    batches.map(b => {
+      const e = byBatch.get(b)
+      const done = e.mailed >= e.total && e.total > 0
+      return chip(b, `B${b}`, done ? ' ✓' : (e.mailed > 0 ? ` <span class="opacity-60">${e.mailed}/${e.total}</span>` : ''))
+    }).join('')
+  chipsWrap.querySelectorAll('[data-mailbatch]').forEach(b => b.addEventListener('click', () => {
+    const v = b.dataset.mailbatch
+    currentBatch = v === 'all' ? 'all' : parseInt(v, 10)
+    renderMailBar(); applyFilters(); updateMailSummary()
+  }))
+  updateMailSummary()
+}
+
+function updateMailSummary() {
+  const el = document.getElementById('mailBatchSummary')
+  const rows = stackRows().filter(l => currentBatch === 'all' || l.stack.batch_no === currentBatch)
+  if (rows.length === 0) { el.textContent = ''; return }
+  const mailed = rows.filter(l => l.stack.letters_sent > 0).length
+  const drafted = rows.filter(l => l.stack.letter_draft).length
+  const heats = rows.map(l => l.stack.heat_score)
+  el.innerHTML = `<span class="text-slate-300 font-semibold">${currentBatch === 'all' ? 'Whole stack' : 'Batch ' + currentBatch}</span> · ${rows.length} letters · <span class="${mailed > 0 ? 'text-emerald-300' : ''}">${mailed} mailed</span> · ${drafted} drafted · heat ${Math.min(...heats)}–${Math.max(...heats)}`
+}
+
+const SEGMENT_LABEL = {
+  owner_occupant: { label: '🏠 Owner-occupant', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+  absentee_oos:   { label: '✈️ Out-of-state',   cls: 'bg-red-500/15 text-red-300 border-red-500/30' },
+  absentee_local: { label: '📍 Local absentee', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+  landlord_3to9:  { label: '🏘 Small landlord', cls: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
+  investor_10plus:{ label: '🏢 Investor 10+',   cls: 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30' },
+}
+
+// Log letters as sent: one touches row per lead (body = the actual letter text
+// when a draft exists), then bump the stack row. Works for one lead or a batch.
+async function markLettersSent(ids) {
+  const now = new Date().toISOString()
+  const touchRows = []
+  for (const id of ids) {
+    const l = leads.find(x => x.id === id)
+    if (!l?.stack) continue
+    touchRows.push({
+      lead_id: id, direction: 'outbound', channel: 'letter',
+      body: l.stack.letter_draft || `(handwritten letter #${(l.stack.letters_sent || 0) + 1} sent — body not recorded)`,
+      status: 'sent', sent_at: now,
+      drafted_by: session?.user?.email || 'dashboard',
+    })
+  }
+  for (let i = 0; i < touchRows.length; i += 200) {
+    const { error } = await sb.from('touches').insert(touchRows.slice(i, i + 200))
+    if (error) return alert('Failed to log letters: ' + error.message)
+  }
+  // Group stack updates by resulting letters_sent so each group is one UPDATE.
+  const groups = new Map()
+  for (const id of ids) {
+    const l = leads.find(x => x.id === id)
+    if (!l?.stack) continue
+    const n = (l.stack.letters_sent || 0) + 1
+    if (!groups.has(n)) groups.set(n, [])
+    groups.get(n).push(id)
+  }
+  for (const [n, gids] of groups) {
+    const patch = { letters_sent: n, last_mailed_at: now, status: `mailed_${Math.min(n, 3)}`, letter_draft: null, updated_at: now }
+    for (let i = 0; i < gids.length; i += 400) {
+      const { error } = await sb.from('mailing_stack').update(patch).in('lead_id', gids.slice(i, i + 400))
+      if (error) return alert('Failed to update mailing stack: ' + error.message)
+    }
+    for (const id of gids) {
+      const l = leads.find(x => x.id === id)
+      if (l?.stack) Object.assign(l.stack, patch)
+    }
+  }
+  renderMailBar(); applyFilters(); updateTotals()
+}
+
+document.getElementById('mailMarkSentBtn').addEventListener('click', () => {
+  if (currentView !== 'mail') return
+  const rows = filtered.filter(l => l.stack)
+  if (rows.length === 0) return
+  const label = currentBatch === 'all' ? 'the whole visible stack' : `batch ${currentBatch}`
+  if (!confirm(`Mark ${rows.length} letter(s) in ${label} as mailed? This logs a letter touch on every lead.`)) return
+  markLettersSent(rows.map(l => l.id))
+})
+
+document.getElementById('mailExportBtn').addEventListener('click', () => {
+  if (currentView !== 'mail') return
+  const rows = filtered.filter(l => l.stack)
+  if (rows.length === 0) return
+  const cols = ['rank','batch_no','heat_score','heat_reasons','segment','salutation_class','salutation',
+    'mail_to_name','mail_to_address','property_address','year_built','assessed_value',
+    'letters_sent','house_detail','letter_draft','photo_url','assessor_url','lead_id']
+  const lines = [cols.join(',')]
+  for (const l of rows) {
+    const s = l.stack
+    lines.push(cols.map(c => {
+      if (c === 'lead_id') return csvCell(l.id)
+      if (c in s) return csvCell(s[c])
+      return csvCell(l[c])
+    }).join(','))
+  }
+  const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url
+  a.download = `mailing-batch-${currentBatch}-${new Date().toISOString().slice(0,10)}.csv`
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+})
 
 // ─────── SAVED VIEWS ───────
 function renderSavedViews() {
@@ -883,7 +1054,9 @@ function renderList() {
     empty.classList.remove('hidden')
     empty.textContent = currentView === 'inbox'
       ? "No replies yet. Inbound messages will land here when they arrive."
-      : 'No leads match your filters.'
+      : currentView === 'mail'
+        ? 'No letters in this batch match your filters.'
+        : 'No leads match your filters.'
     refreshSelectionUI(); return
   }
   empty.classList.add('hidden')
@@ -1030,6 +1203,11 @@ function renderRow(l) {
     actionBadge = `<span class="text-[10px] px-1.5 py-0.5 rounded font-semibold ${cls}" title="Next action">${escape(ACTION_LABEL[l.next_action] || l.next_action)} · ${relativeTime(l.next_action_due_at)}</span>`
   }
 
+  // Mailing Stack chip — batch, rank, letters sent so far
+  const stackChip = l.stack
+    ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${l.stack.letters_sent > 0 ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'}" title="Mailing Stack · heat ${l.stack.heat_score} · ${escape((l.stack.heat_reasons || []).join(', ') || 'no flags')}">📬 B${l.stack.batch_no} · #${l.stack.rank} · ${l.stack.letters_sent}/3 🔥${l.stack.heat_score}</span>`
+    : ''
+
   return `
   <div data-id="${l.id}" class="group bg-ink-900 border border-ink-800 rounded-xl p-3 flex items-stretch gap-3 cursor-pointer hover:border-ink-600 hover:bg-ink-850 transition shadow-sm">
     <div class="flex items-center">
@@ -1045,6 +1223,7 @@ function renderRow(l) {
         ${portfolioBadge}
         <span class="font-bold text-base truncate">${owner}</span>
         ${stageBadge}
+        ${stackChip}
         ${actionBadge}
         ${stackDots}
         ${tags}
@@ -1185,6 +1364,8 @@ function openPanel(id) {
 
     <div id="panelDistressNotesWrap">${l.distress_notes ? `<div class="mb-5 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-200">${escape(l.distress_notes)}</div>` : ''}</div>
 
+    ${renderMailSection(l)}
+
     ${renderSequenceSection(l)}
 
     <div id="panelDealSectionWrap">${renderDealSection(l)}</div>
@@ -1305,6 +1486,14 @@ function openPanel(id) {
   if (skipBtn) skipBtn.addEventListener('click', () => {
     if (!confirm('Skip this step? It will advance the sequence as if the action were taken.')) return
     advanceSequence(id, { skipped: true })
+  })
+
+  // Mailing Stack: mark this one letter sent
+  const mailOneBtn = document.getElementById('mailMarkOneBtn')
+  if (mailOneBtn) mailOneBtn.addEventListener('click', async () => {
+    if (!confirm('Mark this letter as mailed? The letter text gets logged on this lead.')) return
+    await markLettersSent([id])
+    openPanel(id)
   })
 
   const o = document.getElementById('overlay')
@@ -1560,6 +1749,54 @@ function renderSequenceSection(l) {
       </div>
       <div class="space-y-0">${timeline}</div>
       ${actionArea}
+    </div>`
+}
+
+// Mailing Stack card in the lead panel — who gets the letter, why they're hot,
+// the house detail the letters reuse, and the next letter draft (if generated).
+function renderMailSection(l) {
+  if (!l.stack) return ''
+  const s = l.stack
+  const seg = SEGMENT_LABEL[s.segment] || { label: s.segment, cls: 'bg-slate-700/40 text-slate-300 border-slate-600/40' }
+  const reasons = (s.heat_reasons || []).map(r =>
+    `<span class="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-300 border border-orange-500/30 font-medium">${escape(r)}</span>`
+  ).join(' ') || '<span class="text-xs text-slate-500">no flags</span>'
+  const sal = s.salutation
+    ? `“Hi ${escape(s.salutation)},”`
+    : s.salutation_class === 'no_name'
+      ? '<span class="text-slate-400">no name — letter opens with the house</span>'
+      : '<span class="text-slate-500">—</span>'
+  const letterArea = s.letter_draft
+    ? `<div class="mt-3">
+        <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Letter ${s.letters_sent + 1} draft (next to send)</div>
+        <div class="p-3 bg-ink-950/60 border border-cyan-500/20 rounded-lg text-sm text-slate-200 whitespace-pre-wrap" style="font-family: Georgia, 'Times New Roman', serif;">${escape(s.letter_draft)}</div>
+      </div>`
+    : `<div class="mt-3 text-xs text-slate-500">${s.letters_sent >= 3 ? 'All 3 letters sent.' : `No draft yet for letter ${s.letters_sent + 1} — drafts come from the letter generator.`}</div>`
+  const mailedLine = s.letters_sent > 0
+    ? `<span class="text-emerald-300 font-semibold">${s.letters_sent}/3 mailed</span> · last ${new Date(s.last_mailed_at).toLocaleDateString()}`
+    : `<span class="text-slate-400">0/3 mailed</span>`
+  return `
+    <div class="mb-5 p-4 bg-gradient-to-br from-cyan-900/15 to-ink-850 border border-cyan-500/20 rounded-xl">
+      <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-300">📬 Mailing Stack</span>
+        <span class="text-[10px] text-slate-500">Batch ${s.batch_no} · rank #${s.rank} · heat <span class="text-orange-300 font-bold">${s.heat_score}</span></span>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap mb-2">
+        <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold border ${seg.cls}">${seg.label}</span>
+        ${reasons}
+      </div>
+      <dl class="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs mt-2">
+        <dt class="text-slate-500 uppercase tracking-wider font-semibold">Mail to</dt>
+        <dd class="text-slate-200">${escape(s.mail_to_name || '')} — ${escape(s.mail_to_address || '')}</dd>
+        <dt class="text-slate-500 uppercase tracking-wider font-semibold">Opens</dt>
+        <dd class="text-slate-200">${sal}</dd>
+        <dt class="text-slate-500 uppercase tracking-wider font-semibold">House detail</dt>
+        <dd class="${s.house_detail ? 'text-slate-200' : 'text-slate-500'}">${escape(s.house_detail || 'not extracted yet (photo pass pending)')}</dd>
+        <dt class="text-slate-500 uppercase tracking-wider font-semibold">Status</dt>
+        <dd>${mailedLine}${(s.other_lead_ids || []).length ? ` · <span class="text-indigo-300" title="Same owner, folded into this envelope">+${s.other_lead_ids.length} more propert${s.other_lead_ids.length === 1 ? 'y' : 'ies'} same owner</span>` : ''}</dd>
+      </dl>
+      ${letterArea}
+      ${s.letters_sent < 3 ? `<button id="mailMarkOneBtn" class="mt-3 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium">✓ Mark letter ${s.letters_sent + 1} mailed</button>` : ''}
     </div>`
 }
 
