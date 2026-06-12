@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Lincoln CRM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root { --ease: cubic-bezier(0.23, 1, 0.32, 1); }
+  html, body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-feature-settings: 'cv02','cv03','cv04','cv11'; }
+  body { background: #f6f7f9; -webkit-font-smoothing: antialiased; }
+  button { transition: transform 80ms var(--ease), background-color 120ms var(--ease), border-color 120ms var(--ease), color 120ms var(--ease), box-shadow 120ms var(--ease), opacity 120ms var(--ease); }
+  button:active:not(:disabled) { transform: scale(0.97); }
+  input, select, textarea { transition: border-color 120ms var(--ease), box-shadow 120ms var(--ease); }
+  .row-card { transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease); }
+  .row-card:hover { box-shadow: 0 4px 14px -4px rgb(15 23 42 / 0.12); border-color: #cbd5e1; }
+  #detailModal { transition: opacity 160ms var(--ease); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d7dce3; border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: #c2c9d4; }
+  .tab-active { background: #0f172a !important; color: #fff !important; border-color: #0f172a !important; }
+  .chip-active { background: #0e7490 !important; color: #fff !important; border-color: #0e7490 !important; }
+</style>
+</head>
+<body class="text-slate-800">
+
+<!-- BOOT -->
+<div id="boot" class="min-h-screen flex items-center justify-center">
+  <div class="text-center">
+    <div class="inline-block w-8 h-8 border-2 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
+    <p class="mt-3 text-sm text-slate-500">Loading…</p>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div id="login" class="hidden min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-sm p-8">
+    <h1 class="text-2xl font-extrabold text-slate-900 mb-1">Lincoln CRM</h1>
+    <p class="text-slate-500 text-sm mb-6">Sign in to continue</p>
+    <form id="loginForm" class="space-y-3">
+      <input id="email" type="email" required placeholder="you@email.com"
+             class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 focus:outline-none" />
+      <button id="loginBtn" type="submit" class="w-full bg-slate-900 text-white py-2 rounded-lg font-semibold hover:bg-slate-700 disabled:opacity-50">Send magic link</button>
+    </form>
+    <p id="loginMsg" class="text-sm mt-4 hidden"></p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden min-h-screen">
+
+  <!-- Top bar -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-black text-sm shrink-0">L</div>
+      <div class="relative flex-1 max-w-2xl">
+        <input id="search" type="search" placeholder="Search owner, address, or phone digits…"
+               class="w-full pl-9 pr-28 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[15px] text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 focus:outline-none" />
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
+        <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex rounded-lg overflow-hidden border border-slate-200 text-[11px] font-semibold">
+          <button id="scopeStack" class="px-2 py-1 bg-slate-900 text-white">My 5,000</button>
+          <button id="scopeAll" class="px-2 py-1 bg-white text-slate-500 hover:text-slate-800">All Lincoln</button>
+        </div>
+      </div>
+      <a href="index.html" class="text-xs text-slate-400 hover:text-slate-700 shrink-0" title="The original full dashboard">classic view →</a>
+      <button id="signOutBtn" class="text-xs text-slate-400 hover:text-slate-700 shrink-0">sign out</button>
+    </div>
+
+    <!-- Stage tabs -->
+    <div class="max-w-6xl mx-auto px-4 pb-3 flex items-center gap-1.5 flex-wrap" id="stageTabs"></div>
+
+    <!-- Batch row -->
+    <div class="max-w-6xl mx-auto px-4 pb-3 flex items-center justify-between gap-2 flex-wrap" id="batchRow">
+      <div class="flex items-center gap-1 flex-wrap" id="batchChips"></div>
+      <div class="flex items-center gap-2">
+        <span id="listSummary" class="text-xs text-slate-500"></span>
+        <button id="exportBtn" class="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg text-slate-700 hover:border-slate-400">⤓ CSV</button>
+        <button id="markMailedBtn" class="px-2.5 py-1.5 text-xs font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-500">✓ Mark batch mailed</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- List -->
+  <main class="max-w-6xl mx-auto px-4 py-4">
+    <div id="list" class="space-y-1.5"></div>
+    <div id="moreWrap" class="hidden text-center py-4">
+      <button id="moreBtn" class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:border-slate-400">Show more</button>
+    </div>
+    <p id="emptyMsg" class="hidden text-center text-slate-400 py-16 text-sm">Nothing here.</p>
+  </main>
+</div>
+
+<!-- DETAIL MODAL -->
+<div id="detailModal" class="hidden fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm overflow-y-auto" onclick="if(event.target===this)closeDetail()">
+  <div class="max-w-5xl mx-auto my-6 bg-white rounded-2xl shadow-2xl overflow-hidden">
+    <div id="detailContent" class="p-6"></div>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
+
+// ─────── CONFIG ───────
+const SUPABASE_URL = 'https://liaofyzwtoehsxppmibn.supabase.co'
+const SUPABASE_KEY = 'sb_publishable_8kKojgOv_7-WHVDfsf2M-g_-HZ1g4ub'
+const ALLOWED_EMAILS = ['rileymcgerr@gmail.com', 'danielbecher123@gmail.com']
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+const $ = (id) => document.getElementById(id)
+function escape(s) {
+  if (s == null) return ''
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+}
+const money = (v) => v == null || isNaN(v) ? '—' : '$' + Math.round(Number(v)).toLocaleString()
+
+// ─────── STATE ───────
+let session = null
+let stack = []                 // mailing_stack rows with embedded lead
+let byParcel = new Map()       // parcel_id → stack row
+let currentStageTab = 'all'
+let currentBatch = 'all'
+let searchTerm = ''
+let scope = 'stack'            // 'stack' | 'all'
+let shown = 100
+let allResults = []            // server search results (All Lincoln scope)
+let searchTimer = null
+
+// Stage model: mail rounds come from mailing_stack.letters_sent,
+// conversation stages come from leads.current_stage (which wins).
+const REPLIED = new Set(['replied'])
+const ENGAGED = new Set(['engaged', 'offer_made', 'under_contract'])
+const CLOSED  = new Set(['closed_won', 'closed_lost', 'not_interested', 'opted_out', 'bad_number', 'do_not_contact'])
+function stageOf(row) {
+  const cs = row.leads?.current_stage
+  if (REPLIED.has(cs)) return 'replied'
+  if (ENGAGED.has(cs)) return 'engaged'
+  if (CLOSED.has(cs)) return 'closed'
+  const n = row.letters_sent || 0
+  return n === 0 ? 'queue' : 'r' + Math.min(n, 3)
+}
+const STAGE_TABS = [
+  { key: 'all',     label: 'All' },
+  { key: 'queue',   label: '📥 Not mailed' },
+  { key: 'r1',      label: '✉️ Letter 1' },
+  { key: 'r2',      label: '✉️ Letter 2' },
+  { key: 'r3',      label: '✉️ Letter 3' },
+  { key: 'replied', label: '💬 Replied' },
+  { key: 'engaged', label: '🤝 Engaged' },
+  { key: 'closed',  label: '🏁 Closed' },
+]
+const STAGE_PILL = {
+  queue:   ['bg-slate-100 text-slate-600', 'Not mailed'],
+  r1:      ['bg-cyan-50 text-cyan-700 border border-cyan-200', 'Letter 1'],
+  r2:      ['bg-cyan-100 text-cyan-800 border border-cyan-200', 'Letter 2'],
+  r3:      ['bg-cyan-200 text-cyan-900 border border-cyan-300', 'Letter 3'],
+  replied: ['bg-violet-100 text-violet-700 border border-violet-200', 'Replied'],
+  engaged: ['bg-emerald-100 text-emerald-700 border border-emerald-200', 'Engaged'],
+  closed:  ['bg-slate-200 text-slate-500', 'Closed'],
+}
+const SEGMENT_ICON = {
+  owner_occupant: ['🏠', 'Owner-occupant'],
+  absentee_oos:   ['✈️', 'Out-of-state owner'],
+  absentee_local: ['📍', 'Local absentee'],
+  landlord_3to9:  ['🏘', 'Small landlord'],
+  investor_10plus:['🏢', 'Investor 10+'],
+}
+
+// ─────── AUTH ───────
+async function init() {
+  const { data: { session: s } } = await sb.auth.getSession()
+  session = s
+  if (!session) return showLogin()
+  if (!ALLOWED_EMAILS.includes(session.user.email)) { await sb.auth.signOut(); return showLogin('That email is not on the allowlist.') }
+  showApp(); await loadStack()
+}
+function showLogin(msg) {
+  $('boot').classList.add('hidden'); $('login').classList.remove('hidden'); $('app').classList.add('hidden')
+  if (msg) { const m = $('loginMsg'); m.textContent = msg; m.className = 'text-sm mt-4 text-red-500' }
+}
+function showApp() {
+  $('boot').classList.add('hidden'); $('login').classList.add('hidden'); $('app').classList.remove('hidden')
+}
+$('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const email = $('email').value.trim().toLowerCase()
+  const btn = $('loginBtn'), msg = $('loginMsg')
+  if (!ALLOWED_EMAILS.includes(email)) { msg.textContent = 'That email is not allowed.'; msg.className = 'text-sm mt-4 text-red-500'; return }
+  btn.disabled = true; btn.textContent = 'Sending…'
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin + window.location.pathname } })
+  btn.disabled = false; btn.textContent = 'Send magic link'
+  msg.textContent = error ? error.message : `Check ${email} for the sign-in link.`
+  msg.className = 'text-sm mt-4 ' + (error ? 'text-red-500' : 'text-emerald-600')
+})
+$('signOutBtn').addEventListener('click', async () => { await sb.auth.signOut(); location.reload() })
+
+// ─────── DATA ───────
+async function loadStack() {
+  // Only the working 5,000 — never the whole county. "All Lincoln" search hits the server.
+  const { data, error } = await sb.from('mailing_stack').select(`
+    lead_id, rank, batch_no, heat_score, heat_reasons, segment, salutation_class, salutation,
+    house_detail, letter_draft, letters_sent, last_mailed_at, status, mail_to_name, mail_to_address, other_lead_ids,
+    leads ( id, owner_full_name, owner_entity_name, owner_first_name, property_address, property_zip,
+      mailing_address, mailing_city, mailing_state, mailing_zip, is_absentee,
+      primary_phone, secondary_phone, distress_score, distress_notes, year_built, assessed_value,
+      photo_url, assessor_url, parcel_id_primary, current_stage, notes, tags,
+      zillow_url, zillow_dom, zillow_zestimate )
+  `).order('rank', { ascending: true }).limit(6000)
+  if (error) { $('list').innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">Couldn't load: ${escape(error.message)}</div>`; return }
+  stack = data || []
+  byParcel = new Map()
+  for (const r of stack) if (r.leads?.parcel_id_primary) byParcel.set(r.leads.parcel_id_primary, r)
+  renderTabs(); renderBatches(); renderList()
+}
+
+// ─────── FILTER + RENDER ───────
+function visibleRows() {
+  return stack.filter(r => {
+    if (currentStageTab !== 'all' && stageOf(r) !== currentStageTab) return false
+    if (currentBatch !== 'all' && r.batch_no !== currentBatch) return false
+    if (searchTerm) {
+      const l = r.leads || {}
+      const hay = [l.owner_full_name, l.owner_entity_name, l.property_address, l.mailing_address, r.mail_to_name].filter(Boolean).join(' ').toLowerCase()
+      const digits = searchTerm.replace(/\D/g, '')
+      const phoneDigits = (String(l.primary_phone || '') + String(l.secondary_phone || '')).replace(/\D/g, '')
+      if (!hay.includes(searchTerm) && !(digits.length >= 4 && phoneDigits.includes(digits))) return false
+    }
+    return true
+  })
+}
+
+function renderTabs() {
+  const counts = {}
+  for (const r of stack) { const s = stageOf(r); counts[s] = (counts[s] || 0) + 1 }
+  counts.all = stack.length
+  $('stageTabs').innerHTML = STAGE_TABS.map(t => `
+    <button data-tab="${t.key}" class="px-3 py-1.5 rounded-lg text-[13px] font-semibold border ${currentStageTab === t.key ? 'tab-active' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}">
+      ${t.label} <span class="opacity-50 font-medium">${(counts[t.key] || 0).toLocaleString()}</span>
+    </button>`).join('')
+  $('stageTabs').querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
+    currentStageTab = b.dataset.tab; shown = 100; renderTabs(); renderList()
+  }))
+}
+
+function renderBatches() {
+  const byBatch = new Map()
+  for (const r of stack) {
+    if (!byBatch.has(r.batch_no)) byBatch.set(r.batch_no, { total: 0, mailed: 0 })
+    const e = byBatch.get(r.batch_no); e.total++
+    if ((r.letters_sent || 0) > 0) e.mailed++
+  }
+  const chip = (val, label, extra='') => `
+    <button data-batch="${val}" class="px-2 py-1 rounded-md text-[11px] font-semibold border ${currentBatch === val ? 'chip-active' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}">${label}${extra}</button>`
+  $('batchChips').innerHTML =
+    `<span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mr-1">Batch</span>` +
+    chip('all', 'All') +
+    [...byBatch.keys()].sort((a,b) => a-b).map(b => {
+      const e = byBatch.get(b)
+      return chip(b, 'B' + b, e.mailed >= e.total ? ' ✓' : (e.mailed > 0 ? ` <span class="opacity-60">${e.mailed}/${e.total}</span>` : ''))
+    }).join('')
+  $('batchChips').querySelectorAll('[data-batch]').forEach(b => b.addEventListener('click', () => {
+    const v = b.dataset.batch
+    currentBatch = v === 'all' ? 'all' : parseInt(v, 10)
+    shown = 100; renderBatches(); renderList()
+  }))
+}
+
+function rowHtml(r) {
+  const l = r.leads || {}
+  const st = stageOf(r)
+  const [pillCls, pillLabel] = STAGE_PILL[st] || STAGE_PILL.queue
+  const [segIcon, segTitle] = SEGMENT_ICON[r.segment] || ['🏠', r.segment]
+  const dots = [1,2,3].map(i => `<span class="inline-block w-1.5 h-1.5 rounded-full ${i <= (r.letters_sent||0) ? 'bg-cyan-600' : 'bg-slate-200'}"></span>`).join('')
+  return `
+  <div data-open="${r.lead_id}" class="row-card bg-white border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-3 cursor-pointer">
+    <div class="w-16 h-12 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center text-slate-300 shrink-0">
+      ${l.photo_url ? `<img src="${escape(l.photo_url)}" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-cover" onerror="this.remove()">` : '🏠'}
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="font-bold text-[15px] text-slate-900 truncate">${escape(l.property_address || '(no address)')}</span>
+        <span class="text-[11px] px-1.5 py-0.5 rounded-md font-semibold ${pillCls} shrink-0">${pillLabel}</span>
+      </div>
+      <div class="text-[13px] text-slate-500 truncate mt-0.5">
+        <span title="${escape(segTitle)}">${segIcon}</span>
+        ${escape(r.mail_to_name || l.owner_full_name || '')}
+        ${l.is_absentee && l.mailing_state && l.mailing_state !== 'NE' ? `<span class="text-red-500 font-medium">· ${escape(l.mailing_state)}</span>` : ''}
+        ${l.primary_phone ? `<span class="text-emerald-600">· ☎ ${escape(l.primary_phone)}</span>` : ''}
+      </div>
+    </div>
+    <div class="hidden sm:flex items-center gap-4 shrink-0 text-right">
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Heat</div>
+        <div class="text-sm font-extrabold ${r.heat_score >= 80 ? 'text-orange-600' : r.heat_score >= 55 ? 'text-amber-600' : 'text-slate-500'}">${r.heat_score}</div>
+      </div>
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Assessed</div>
+        <div class="text-sm font-semibold text-slate-700">${money(l.assessed_value)}</div>
+      </div>
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">B${r.batch_no} · #${r.rank}</div>
+        <div class="flex gap-1 justify-end mt-1.5">${dots}</div>
+      </div>
+    </div>
+  </div>`
+}
+
+function allResultHtml(p) {
+  const inStack = byParcel.get(p.parcel_id)
+  return `
+  <div data-openparcel="${escape(p.parcel_id)}" class="row-card bg-white border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-3 cursor-pointer">
+    <div class="w-16 h-12 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center text-slate-300 shrink-0">
+      ${p.primary_photo_url ? `<img src="${escape(p.primary_photo_url)}" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-cover" onerror="this.remove()">` : '🏠'}
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-[15px] text-slate-900 truncate">${escape(p.address || '')}</span>
+        ${inStack ? '<span class="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-cyan-50 text-cyan-700 border border-cyan-200 shrink-0">📬 in stack</span>' : ''}
+      </div>
+      <div class="text-[13px] text-slate-500 truncate mt-0.5">${escape(p.current_owner || '')}</div>
+    </div>
+    <div class="hidden sm:flex items-center gap-4 shrink-0">
+      <div class="text-right">
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Assessed</div>
+        <div class="text-sm font-semibold text-slate-700">${money(p.current_assessed_val)}</div>
+      </div>
+      <div class="text-right">
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Built · sqft</div>
+        <div class="text-sm text-slate-600">${p.res_year_built || '—'} · ${p.living_area ? Number(p.living_area).toLocaleString() : '—'}</div>
+      </div>
+    </div>
+  </div>`
+}
+
+function renderList() {
+  const list = $('list'), empty = $('emptyMsg'), moreWrap = $('moreWrap')
+  if (scope === 'all') {
+    $('batchRow').style.display = 'none'; $('stageTabs').style.display = 'none'
+    list.innerHTML = allResults.map(allResultHtml).join('')
+    empty.classList.toggle('hidden', allResults.length > 0)
+    empty.textContent = searchTerm.length < 3 ? 'Type at least 3 characters to search all 96,240 Lincoln properties.' : 'No matches in the county data.'
+    moreWrap.classList.add('hidden')
+  } else {
+    $('batchRow').style.display = ''; $('stageTabs').style.display = ''
+    const rows = visibleRows()
+    list.innerHTML = rows.slice(0, shown).map(rowHtml).join('')
+    empty.classList.toggle('hidden', rows.length > 0)
+    empty.textContent = 'Nothing here.'
+    moreWrap.classList.toggle('hidden', rows.length <= shown)
+    const mailed = rows.filter(r => (r.letters_sent || 0) > 0).length
+    $('listSummary').textContent = `${rows.length.toLocaleString()} mailboxes · ${mailed} mailed`
+  }
+  list.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', () => openDetail(el.dataset.open)))
+  list.querySelectorAll('[data-openparcel]').forEach(el => el.addEventListener('click', () => openDetailByParcel(el.dataset.openparcel)))
+}
+$('moreBtn').addEventListener('click', () => { shown += 200; renderList() })
+
+// ─────── SEARCH ───────
+$('search').addEventListener('input', (e) => {
+  searchTerm = e.target.value.trim().toLowerCase()
+  if (scope === 'all') {
+    clearTimeout(searchTimer)
+    searchTimer = setTimeout(searchAllLincoln, 300)
+  } else { shown = 100; renderList() }
+})
+function setScope(s) {
+  scope = s
+  $('scopeStack').className = 'px-2 py-1 ' + (s === 'stack' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:text-slate-800')
+  $('scopeAll').className = 'px-2 py-1 ' + (s === 'all' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:text-slate-800')
+  if (s === 'all') searchAllLincoln()
+  renderList()
+}
+$('scopeStack').addEventListener('click', () => setScope('stack'))
+$('scopeAll').addEventListener('click', () => setScope('all'))
+
+async function searchAllLincoln() {
+  if (scope !== 'all') return
+  if (!searchTerm || searchTerm.length < 3) { allResults = []; renderList(); return }
+  const q = searchTerm.replace(/[%,()]/g, ' ').trim()
+  const { data, error } = await sb.from('properties')
+    .select('qref, parcel_id, address, current_owner, current_assessed_val, res_year_built, living_area, neighborhood, primary_photo_url')
+    .or(`address.ilike.%${q}%,current_owner.ilike.%${q}%`)
+    .order('current_assessed_val', { ascending: true })
+    .limit(30)
+  allResults = error ? [] : (data || [])
+  renderList()
+}
+
+// ─────── DETAIL ───────
+window.closeDetail = () => { $('detailModal').classList.add('hidden'); document.body.style.overflow = '' }
+
+async function openDetail(leadId) {
+  const r = stack.find(x => x.lead_id === leadId); if (!r) return
+  await showDetail({ stackRow: r, parcel: r.leads?.parcel_id_primary })
+}
+async function openDetailByParcel(parcelId) {
+  await showDetail({ stackRow: byParcel.get(parcelId) || null, parcel: parcelId })
+}
+
+async function showDetail({ stackRow, parcel }) {
+  $('detailContent').innerHTML = '<div class="py-20 text-center text-slate-400"><div class="inline-block w-7 h-7 border-2 border-slate-200 border-t-slate-700 rounded-full animate-spin"></div></div>'
+  $('detailModal').classList.remove('hidden'); document.body.style.overflow = 'hidden'
+
+  // 1. Property facts
+  const { data: props } = await sb.from('properties').select('*').eq('parcel_id', parcel).limit(1)
+  const p = props?.[0] || null
+  // 2. Economics + 3. photo condition + 4. comps (parallel)
+  const [dealRes, distRes] = await Promise.all([
+    p ? sb.from('deal_rankings').select('*').eq('qref', p.qref).limit(1) : Promise.resolve({ data: null }),
+    p ? sb.from('distress_analysis').select('*').eq('qref', p.qref).limit(1) : Promise.resolve({ data: null }),
+  ])
+  const deal = dealRes.data?.[0] || null
+  const dist = distRes.data?.[0] || null
+  renderDetail({ stackRow, p, deal, dist })
+  if (p) loadComps(p)
+}
+
+function factRow(label, value, strong = false) {
+  return `<div class="flex justify-between gap-3 py-1.5 border-b border-slate-100 last:border-0">
+    <span class="text-[12px] text-slate-400 font-semibold uppercase tracking-wide shrink-0">${label}</span>
+    <span class="text-[13px] ${strong ? 'font-bold text-slate-900' : 'text-slate-700'} text-right">${value}</span></div>`
+}
+
+function renderDetail({ stackRow, p, deal, dist }) {
+  const l = stackRow?.leads || {}
+  const addr = p?.address || l.property_address || ''
+  const photo = l.photo_url || p?.primary_photo_url || deal?.primary_photo_url
+  const assessorUrl = l.assessor_url || deal?.assessor_url
+  const sqft = p?.living_area ? Number(p.living_area) : null
+  const tenure = deal?.last_sale_year ? (new Date().getFullYear() - deal.last_sale_year) + ' yrs' : '—'
+
+  const stackCard = stackRow ? (() => {
+    const s = stackRow
+    const [segIcon, segTitle] = SEGMENT_ICON[s.segment] || ['🏠', s.segment]
+    const reasons = (s.heat_reasons || []).map(x => `<span class="text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200 font-semibold">${escape(x)}</span>`).join(' ')
+    const sal = s.salutation ? `“Hi ${escape(s.salutation)},”` : (s.salutation_class === 'no_name' ? 'opens with the house (no name)' : '—')
+    return `
+    <div class="p-4 bg-cyan-50/60 border border-cyan-200 rounded-xl mb-4">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-1.5">
+        <span class="text-[11px] font-extrabold uppercase tracking-wider text-cyan-800">📬 Mailing Stack — Batch ${s.batch_no} · #${s.rank} · heat <span class="text-orange-600">${s.heat_score}</span></span>
+        <span class="text-[11px] text-slate-500">${segIcon} ${escape(segTitle)} · ${s.letters_sent || 0}/3 mailed</span>
+      </div>
+      <div class="flex gap-1 flex-wrap mb-2">${reasons}</div>
+      <div class="text-[13px] text-slate-700"><b>Mail to:</b> ${escape(s.mail_to_name || '')} — ${escape(s.mail_to_address || '')}</div>
+      <div class="text-[13px] text-slate-700"><b>Opens:</b> ${sal}${s.house_detail ? ` · <b>Detail:</b> ${escape(s.house_detail)}` : ''}</div>
+      ${s.letter_draft ? `<div class="mt-2 p-3 bg-white border border-cyan-200 rounded-lg text-[13px] whitespace-pre-wrap" style="font-family: Georgia, serif;">${escape(s.letter_draft)}</div>` : ''}
+      <div class="flex gap-2 mt-3">
+        ${(s.letters_sent || 0) < 3 ? `<button id="dMarkMailed" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[13px] font-semibold">✓ Letter ${(s.letters_sent || 0) + 1} mailed</button>` : ''}
+        <button id="dLogCall" class="px-3 py-1.5 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 rounded-lg text-[13px] font-semibold">📞 Log call</button>
+        <select id="dStage" class="px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-[13px] text-slate-700">
+          <option value="">Set stage…</option>
+          <option value="replied">💬 Replied</option>
+          <option value="engaged">🤝 Engaged</option>
+          <option value="offer_made">📄 Offer made</option>
+          <option value="under_contract">✍️ Under contract</option>
+          <option value="closed_won">✅ Closed won</option>
+          <option value="not_interested">🚫 Not interested</option>
+          <option value="do_not_contact">⛔ Do not contact</option>
+        </select>
+      </div>
+    </div>`
+  })() : ''
+
+  const flagsHtml = deal?.flags ? deal.flags.split(';').map(f =>
+    `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium">${escape(f.replaceAll('_',' '))}</span>`).join(' ') : ''
+
+  $('detailContent').innerHTML = `
+    <div class="flex items-start justify-between gap-3 mb-4">
+      <div>
+        <h2 class="text-xl font-extrabold text-slate-900">${escape(addr)}</h2>
+        <div class="text-[13px] text-slate-500 mt-0.5">${escape(p?.current_owner || l.owner_full_name || '')}
+          ${p?.owner_property_count > 1 ? `<span class="text-amber-600 font-semibold">· owns ${p.owner_property_count} properties</span>` : ''}</div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        ${assessorUrl ? `<a href="${escape(assessorUrl)}" target="_blank" rel="noopener" class="text-[12px] font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2.5 py-1.5">assessor ↗</a>` : ''}
+        ${l.zillow_url ? `<a href="${escape(l.zillow_url)}" target="_blank" rel="noopener" class="text-[12px] font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2.5 py-1.5">zillow ↗</a>` : ''}
+        <button onclick="closeDetail()" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold">✕</button>
+      </div>
+    </div>
+
+    ${stackCard}
+
+    <div class="grid md:grid-cols-2 gap-4">
+      <div>
+        <div class="rounded-xl overflow-hidden bg-slate-100 aspect-[16/10] flex items-center justify-center text-5xl text-slate-300 mb-3">
+          ${photo ? `<img src="${escape(photo)}" referrerpolicy="no-referrer" class="w-full h-full object-cover" onerror="this.remove()">` : '🏠'}
+        </div>
+        <div class="p-4 bg-white border border-slate-200 rounded-xl">
+          <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">Property facts</div>
+          ${factRow('Square feet', sqft ? sqft.toLocaleString() : '—', true)}
+          ${factRow('Year built', p?.res_year_built || l.year_built || '—', true)}
+          ${factRow('Assessed value', money(p?.current_assessed_val ?? l.assessed_value), true)}
+          ${factRow('Prev. assessed', money(p?.prev_assessed_val))}
+          ${factRow('Taxes owed', p?.current_taxes_owed > 0 ? `<span class="text-red-600 font-bold">${money(p.current_taxes_owed)}</span>` : '$0')}
+          ${factRow('Neighborhood', escape(p?.neighborhood || '—'))}
+          ${factRow('Subdivision', escape(p?.subdivision_name || '—'))}
+          ${factRow('Owner tenure', tenure)}
+          ${factRow('Owner mailing', escape([p?.owner_mailing_addr, p?.owner_mailing_city, p?.owner_mailing_state].filter(Boolean).join(', ') || '—'))}
+          ${dist ? factRow('Photo condition', `<span class="font-semibold ${/distress|vacant/.test(dist.condition_label || '') ? 'text-red-600' : 'text-slate-700'}">${escape(dist.condition_label || '—')}</span> (roof ${dist.roof_score ?? '—'}, siding ${dist.siding_paint_score ?? '—'}, yard ${dist.yard_upkeep_score ?? '—'})`) : ''}
+          ${l.distress_notes ? `<div class="mt-2 text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">${escape(l.distress_notes)}</div>` : ''}
+          <div class="flex gap-1 flex-wrap mt-3">${flagsHtml}</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="p-4 bg-white border border-slate-200 rounded-xl mb-4" id="compPanel">
+          <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">What it's worth — live comps</div>
+          <div id="compBody" class="text-sm text-slate-400">Pulling sales…</div>
+        </div>
+        <div class="p-4 bg-white border border-slate-200 rounded-xl">
+          <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">Offer ladder (model)</div>
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="p-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <div class="text-[10px] uppercase font-bold text-emerald-700">First offer</div>
+              <div class="text-base font-extrabold text-emerald-800">${money(deal?.starting_offer)}</div>
+            </div>
+            <div class="p-2 bg-amber-50 border border-amber-200 rounded-lg">
+              <div class="text-[10px] uppercase font-bold text-amber-700">Wholesale</div>
+              <div class="text-base font-extrabold text-amber-800">${money(deal?.wholesale_offer)}</div>
+            </div>
+            <div class="p-2 bg-slate-50 border border-slate-200 rounded-lg">
+              <div class="text-[10px] uppercase font-bold text-slate-500">As-is (model)</div>
+              <div class="text-base font-extrabold text-slate-700">${money(deal?.as_is_estimate)}</div>
+            </div>
+          </div>
+          <div class="text-[12px] text-slate-500 mt-2 flex flex-wrap gap-x-3">
+            <span>rehab est: <b>${money(deal?.rehab_estimate)}</b></span>
+            <span>60-day margin: <b class="${deal?.net_margin_60d > 0 ? 'text-emerald-600' : 'text-red-500'}">${money(deal?.net_margin_60d)}</b></span>
+            ${deal?.slow_market ? '<span class="text-rose-600 font-semibold">⚠ slow market</span>' : ''}
+            ${l.zillow_zestimate ? `<span>zestimate: <b>${money(l.zillow_zestimate)}</b></span>` : ''}
+          </div>
+        </div>
+
+        ${stackRow ? `
+        <div class="p-4 bg-white border border-slate-200 rounded-xl mt-4">
+          <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">Notes</div>
+          <textarea id="dNotes" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-[13px] focus:bg-white focus:border-slate-400 focus:outline-none" placeholder="Notes…">${escape(l.notes || '')}</textarea>
+          <button id="dSaveNotes" class="mt-2 px-3 py-1.5 bg-slate-900 hover:bg-slate-700 text-white rounded-lg text-[13px] font-semibold">Save</button>
+          <span id="dSaveOk" class="ml-2 text-[13px] text-emerald-600 hidden">Saved.</span>
+        </div>` : ''}
+      </div>
+    </div>`
+
+  // Bind actions
+  if (stackRow) {
+    $('dMarkMailed')?.addEventListener('click', async () => {
+      if (!confirm('Mark this letter as mailed?')) return
+      await markLettersSent([stackRow.lead_id])
+      showDetail({ stackRow, parcel: stackRow.leads?.parcel_id_primary })
+    })
+    $('dLogCall')?.addEventListener('click', async () => {
+      const note = prompt('Call note (optional):') ?? ''
+      const { error } = await sb.from('touches').insert({
+        lead_id: stackRow.lead_id, direction: 'outbound', channel: 'call',
+        body: note ? `(call) ${note}` : '(call attempted)', status: 'sent',
+        sent_at: new Date().toISOString(), drafted_by: session?.user?.email || 'v2',
+      })
+      if (error) alert('Failed: ' + error.message); else alert('Call logged.')
+    })
+    $('dStage')?.addEventListener('change', async (e) => {
+      const stage = e.target.value; if (!stage) return
+      const { error } = await sb.from('leads').update({ current_stage: stage, stage_changed_at: new Date().toISOString() }).eq('id', stackRow.lead_id)
+      if (error) return alert('Failed: ' + error.message)
+      if (stackRow.leads) stackRow.leads.current_stage = stage
+      renderTabs(); renderList()
+    })
+    $('dSaveNotes')?.addEventListener('click', async () => {
+      const notes = $('dNotes').value
+      const { error } = await sb.from('leads').update({ notes }).eq('id', stackRow.lead_id)
+      if (error) return alert('Failed: ' + error.message)
+      if (stackRow.leads) stackRow.leads.notes = notes
+      $('dSaveOk').classList.remove('hidden'); setTimeout(() => $('dSaveOk')?.classList.add('hidden'), 1500)
+    })
+  }
+}
+
+// ─────── COMP ENGINE ───────
+// Pulls last-12-month county sales from the same assessor neighborhood,
+// preselects the close matches (sqft ±25%, year ±15), and lets you veto
+// any comp — the number recomputes live. Median $/sqft × subject sqft.
+let compState = null
+async function loadComps(p) {
+  const sqft = Number(p.living_area) || null
+  const yb = Number(p.res_year_built) || null
+  const body = $('compBody'); if (!body) return
+  if (!p.neighborhood || !sqft) { body.innerHTML = '<span class="text-slate-400 text-[13px]">Not enough data (no neighborhood / sqft) to pull comps.</span>'; return }
+
+  const { data, error } = await sb.from('recent_sales')
+    .select('site_address, sale_date, sale_price, sqft, year_built, nbh, sale_ratio, parcel_id')
+    .eq('nbh', p.neighborhood)
+    .gt('sale_price', 10000)
+    .limit(60)
+  if (error) { body.innerHTML = `<span class="text-red-500 text-[13px]">${escape(error.message)}</span>`; return }
+
+  let comps = (data || [])
+    .filter(c => c.sqft > 0 && c.parcel_id !== p.parcel_id)
+    .map(c => ({ ...c, psf: c.sale_price / c.sqft, d: new Date(c.sale_date) }))
+    .sort((a, b) => Math.abs((a.sqft - sqft) / sqft) - Math.abs((b.sqft - sqft) / sqft))
+    .slice(0, 14)
+  comps.forEach((c, i) => {
+    c.idx = i
+    c.on = Math.abs(c.sqft - sqft) / sqft <= 0.25 && (!yb || !c.year_built || Math.abs(c.year_built - yb) <= 15)
+  })
+  if (comps.filter(c => c.on).length < 3) comps.forEach(c => { if (Math.abs(c.sqft - sqft) / sqft <= 0.40) c.on = true })
+
+  compState = { comps, sqft, nbh: p.neighborhood }
+  renderComps()
+}
+
+function renderComps() {
+  const body = $('compBody'); if (!body || !compState) return
+  const { comps, sqft, nbh } = compState
+  if (comps.length === 0) {
+    body.innerHTML = `<span class="text-slate-400 text-[13px]">No sales in assessor neighborhood ${escape(nbh)} in the last 12 months — lean on the model as-is value and assessed.</span>`
+    return
+  }
+  const on = comps.filter(c => c.on)
+  const psfs = on.map(c => c.psf).sort((a, b) => a - b)
+  const med = psfs.length ? psfs[Math.floor(psfs.length / 2)] : null
+  const p25 = psfs.length ? psfs[Math.floor(psfs.length * 0.25)] : null
+  const p75 = psfs.length ? psfs[Math.floor(psfs.length * 0.75)] : null
+  const est = med ? med * sqft : null
+
+  body.innerHTML = `
+    <div class="flex items-end justify-between flex-wrap gap-2 mb-3">
+      <div>
+        <div class="text-2xl font-black text-slate-900">${est ? money(est) : '—'}</div>
+        <div class="text-[12px] text-slate-500">${on.length} comp${on.length === 1 ? '' : 's'} · median ${med ? '$' + Math.round(med) + '/sqft' : '—'} × ${sqft.toLocaleString()} sqft
+          ${p25 && p75 ? `· range ${money(p25 * sqft)}–${money(p75 * sqft)}` : ''}</div>
+      </div>
+      <div class="text-[11px] text-slate-400">nbh ${escape(nbh)} · last 12 mo · uncheck to veto</div>
+    </div>
+    <div class="space-y-1 max-h-64 overflow-y-auto pr-1">
+      ${comps.map(c => `
+        <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg ${c.on ? 'bg-slate-50' : 'opacity-45'} hover:bg-slate-100 cursor-pointer">
+          <input type="checkbox" data-comp="${c.idx}" ${c.on ? 'checked' : ''} class="w-3.5 h-3.5 rounded border-slate-300 accent-slate-900">
+          <span class="flex-1 min-w-0 text-[13px] text-slate-700 truncate">${escape(c.site_address || '')}</span>
+          <span class="text-[12px] text-slate-400 shrink-0">${c.sqft ? Number(c.sqft).toLocaleString() + 'sf' : ''} ${c.year_built ? '· ' + c.year_built : ''} ${isNaN(c.d) ? '' : '· ' + c.d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}</span>
+          <span class="text-[13px] font-bold text-slate-900 shrink-0 w-20 text-right">${money(c.sale_price)}</span>
+          <span class="text-[11px] text-slate-400 shrink-0 w-14 text-right">$${Math.round(c.psf)}/sf</span>
+        </label>`).join('')}
+    </div>`
+  body.querySelectorAll('[data-comp]').forEach(cb => cb.addEventListener('change', () => {
+    compState.comps[parseInt(cb.dataset.comp, 10)].on = cb.checked
+    renderComps()
+  }))
+}
+
+// ─────── MARK MAILED + EXPORT ───────
+async function markLettersSent(ids) {
+  const now = new Date().toISOString()
+  const touchRows = [], groups = new Map()
+  for (const id of ids) {
+    const r = stack.find(x => x.lead_id === id); if (!r) continue
+    touchRows.push({
+      lead_id: id, direction: 'outbound', channel: 'letter',
+      body: r.letter_draft || `(handwritten letter #${(r.letters_sent || 0) + 1} sent — body not recorded)`,
+      status: 'sent', sent_at: now, drafted_by: session?.user?.email || 'v2',
+    })
+    const n = (r.letters_sent || 0) + 1
+    if (!groups.has(n)) groups.set(n, [])
+    groups.get(n).push(id)
+  }
+  for (let i = 0; i < touchRows.length; i += 200) {
+    const { error } = await sb.from('touches').insert(touchRows.slice(i, i + 200))
+    if (error) return alert('Failed to log letters: ' + error.message)
+  }
+  for (const [n, gids] of groups) {
+    const patch = { letters_sent: n, last_mailed_at: now, status: `mailed_${Math.min(n, 3)}`, letter_draft: null, updated_at: now }
+    for (let i = 0; i < gids.length; i += 400) {
+      const { error } = await sb.from('mailing_stack').update(patch).in('lead_id', gids.slice(i, i + 400))
+      if (error) return alert('Failed to update stack: ' + error.message)
+    }
+    for (const id of gids) { const r = stack.find(x => x.lead_id === id); if (r) Object.assign(r, patch) }
+  }
+  renderTabs(); renderBatches(); renderList()
+}
+
+$('markMailedBtn').addEventListener('click', () => {
+  const rows = visibleRows().filter(r => (r.letters_sent || 0) < 3)
+  if (rows.length === 0) return
+  const label = currentBatch === 'all' ? 'all visible mailboxes' : `batch ${currentBatch}`
+  if (!confirm(`Mark ${rows.length} letter(s) in ${label} as mailed?`)) return
+  markLettersSent(rows.map(r => r.lead_id))
+})
+
+function csvCell(v) {
+  if (v === null || v === undefined) return ''
+  const s = Array.isArray(v) ? v.join('|') : String(v)
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+$('exportBtn').addEventListener('click', () => {
+  const rows = visibleRows()
+  if (rows.length === 0) return
+  const cols = ['rank','batch_no','heat_score','heat_reasons','segment','salutation_class','salutation','mail_to_name','mail_to_address','property_address','letters_sent','house_detail','letter_draft','lead_id']
+  const lines = [cols.join(',')]
+  for (const r of rows) lines.push(cols.map(c => c === 'property_address' ? csvCell(r.leads?.property_address) : csvCell(r[c])).join(','))
+  const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url
+  a.download = `mailing-batch-${currentBatch}-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+})
+
+// ─────── BOOT ───────
+init()
+sb.auth.onAuthStateChange((event, s) => {
+  if (event === 'SIGNED_IN' && s && !session) {
+    session = s
+    if (ALLOWED_EMAILS.includes(session.user.email)) { showApp(); loadStack() }
+    else { sb.auth.signOut().then(() => showLogin('That email is not on the allowlist.')) }
+  } else if (event === 'SIGNED_OUT') { session = null; showLogin() }
+})
+</script>
+</body>
+</html>
