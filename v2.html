@@ -57,21 +57,20 @@
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
       <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-black text-sm shrink-0">L</div>
-      <div class="relative flex-1 max-w-2xl">
+      <select id="listSelect" class="shrink-0 bg-white border border-slate-300 rounded-xl px-3 py-2 text-[15px] font-bold text-slate-900 focus:border-slate-500 focus:outline-none cursor-pointer">
+        <option value="stack">📋 The 5,000</option>
+        <option value="all">🔍 All Lincoln</option>
+      </select>
+      <div class="relative flex-1 max-w-xl">
         <input id="search" type="search" placeholder="Search owner, address, or phone digits…"
-               class="w-full pl-9 pr-28 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[15px] text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 focus:outline-none" />
+               class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[15px] text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 focus:outline-none" />
         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
-        <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex rounded-lg overflow-hidden border border-slate-200 text-[11px] font-semibold">
-          <button id="scopeStack" class="px-2 py-1 bg-slate-900 text-white">My 5,000</button>
-          <button id="scopeAll" class="px-2 py-1 bg-white text-slate-500 hover:text-slate-800">All Lincoln</button>
-        </div>
       </div>
-      <a href="index.html" class="text-xs text-slate-400 hover:text-slate-700 shrink-0" title="The original full dashboard">classic view →</a>
       <button id="signOutBtn" class="text-xs text-slate-400 hover:text-slate-700 shrink-0">sign out</button>
     </div>
 
-    <!-- Stage tabs -->
-    <div class="max-w-6xl mx-auto px-4 pb-3 flex items-center gap-1.5 flex-wrap" id="stageTabs"></div>
+    <!-- KPI tiles -->
+    <div class="max-w-6xl mx-auto px-4 pb-3 grid grid-cols-3 sm:grid-cols-5 gap-2" id="kpiTiles"></div>
 
     <!-- Batch row -->
     <div class="max-w-6xl mx-auto px-4 pb-3 flex items-center justify-between gap-2 flex-wrap" id="batchRow">
@@ -129,37 +128,38 @@ let shown = 100
 let allResults = []            // server search results (All Lincoln scope)
 let searchTimer = null
 
-// Stage model: mail rounds come from mailing_stack.letters_sent,
-// conversation stages come from leads.current_stage (which wins).
+// Pipeline model. One bucket per lead:
+//   queued      — not mailed yet (the to-do pile)
+//   sent        — at least one letter out, still waiting
+//   replied     — they wrote/called back, unworked
+//   needs_input — active deal (engaged / offer / under contract): your move
+//   closed      — done (won/lost/dnc) — hidden from tiles, still in All
+// Mail rounds come from mailing_stack.letters_sent; conversation stages
+// come from leads.current_stage (which wins).
 const REPLIED = new Set(['replied'])
-const ENGAGED = new Set(['engaged', 'offer_made', 'under_contract'])
+const NEEDS_INPUT = new Set(['engaged', 'offer_made', 'under_contract'])
 const CLOSED  = new Set(['closed_won', 'closed_lost', 'not_interested', 'opted_out', 'bad_number', 'do_not_contact'])
-function stageOf(row) {
+function kpiOf(row) {
   const cs = row.leads?.current_stage
-  if (REPLIED.has(cs)) return 'replied'
-  if (ENGAGED.has(cs)) return 'engaged'
   if (CLOSED.has(cs)) return 'closed'
-  const n = row.letters_sent || 0
-  return n === 0 ? 'queue' : 'r' + Math.min(n, 3)
+  if (NEEDS_INPUT.has(cs)) return 'needs_input'
+  if (REPLIED.has(cs)) return 'replied'
+  return (row.letters_sent || 0) === 0 ? 'queued' : 'sent'
 }
-const STAGE_TABS = [
-  { key: 'all',     label: 'All' },
-  { key: 'queue',   label: '📥 Not mailed' },
-  { key: 'r1',      label: '✉️ Letter 1' },
-  { key: 'r2',      label: '✉️ Letter 2' },
-  { key: 'r3',      label: '✉️ Letter 3' },
-  { key: 'replied', label: '💬 Replied' },
-  { key: 'engaged', label: '🤝 Engaged' },
-  { key: 'closed',  label: '🏁 Closed' },
+// Tiles, in pipeline order. 'all' = Total leads.
+const KPI_TILES = [
+  { key: 'all',         label: 'Total leads', accent: 'text-slate-900' },
+  { key: 'queued',      label: 'Queued',      accent: 'text-slate-600' },
+  { key: 'sent',        label: 'Sent',        accent: 'text-cyan-700' },
+  { key: 'replied',     label: 'Replied',     accent: 'text-violet-700' },
+  { key: 'needs_input', label: 'Needs input', accent: 'text-emerald-700' },
 ]
 const STAGE_PILL = {
-  queue:   ['bg-slate-100 text-slate-600', 'Not mailed'],
-  r1:      ['bg-cyan-50 text-cyan-700 border border-cyan-200', 'Letter 1'],
-  r2:      ['bg-cyan-100 text-cyan-800 border border-cyan-200', 'Letter 2'],
-  r3:      ['bg-cyan-200 text-cyan-900 border border-cyan-300', 'Letter 3'],
-  replied: ['bg-violet-100 text-violet-700 border border-violet-200', 'Replied'],
-  engaged: ['bg-emerald-100 text-emerald-700 border border-emerald-200', 'Engaged'],
-  closed:  ['bg-slate-200 text-slate-500', 'Closed'],
+  queued:      ['bg-slate-100 text-slate-600', 'Queued'],
+  sent:        ['bg-cyan-50 text-cyan-700 border border-cyan-200', 'Sent'],
+  replied:     ['bg-violet-100 text-violet-700 border border-violet-200', 'Replied'],
+  needs_input: ['bg-emerald-100 text-emerald-700 border border-emerald-200', 'Needs input'],
+  closed:      ['bg-slate-200 text-slate-500', 'Closed'],
 }
 const SEGMENT_ICON = {
   owner_occupant: ['🏠', 'Owner-occupant'],
@@ -213,13 +213,13 @@ async function loadStack() {
   stack = data || []
   byParcel = new Map()
   for (const r of stack) if (r.leads?.parcel_id_primary) byParcel.set(r.leads.parcel_id_primary, r)
-  renderTabs(); renderBatches(); renderList()
+  renderKpis(); renderBatches(); renderList()
 }
 
 // ─────── FILTER + RENDER ───────
 function visibleRows() {
   return stack.filter(r => {
-    if (currentStageTab !== 'all' && stageOf(r) !== currentStageTab) return false
+    if (currentStageTab !== 'all' && kpiOf(r) !== currentStageTab) return false
     if (currentBatch !== 'all' && r.batch_no !== currentBatch) return false
     if (searchTerm) {
       const l = r.leads || {}
@@ -232,16 +232,19 @@ function visibleRows() {
   })
 }
 
-function renderTabs() {
+function renderKpis() {
   const counts = {}
-  for (const r of stack) { const s = stageOf(r); counts[s] = (counts[s] || 0) + 1 }
+  for (const r of stack) { const s = kpiOf(r); counts[s] = (counts[s] || 0) + 1 }
   counts.all = stack.length
-  $('stageTabs').innerHTML = STAGE_TABS.map(t => `
-    <button data-tab="${t.key}" class="px-3 py-1.5 rounded-lg text-[13px] font-semibold border ${currentStageTab === t.key ? 'tab-active' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}">
-      ${t.label} <span class="opacity-50 font-medium">${(counts[t.key] || 0).toLocaleString()}</span>
-    </button>`).join('')
-  $('stageTabs').querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
-    currentStageTab = b.dataset.tab; shown = 100; renderTabs(); renderList()
+  $('kpiTiles').innerHTML = KPI_TILES.map(t => {
+    const on = currentStageTab === t.key
+    return `<button data-tab="${t.key}" class="text-left rounded-xl border px-3 py-2.5 transition ${on ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-200 hover:border-slate-300'}">
+      <div class="text-2xl font-black ${on ? 'text-white' : t.accent}">${(counts[t.key] || 0).toLocaleString()}</div>
+      <div class="text-[11px] font-semibold uppercase tracking-wide ${on ? 'text-slate-300' : 'text-slate-400'}">${t.label}</div>
+    </button>`
+  }).join('')
+  $('kpiTiles').querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
+    currentStageTab = b.dataset.tab; shown = 100; renderKpis(); renderList()
   }))
 }
 
@@ -270,41 +273,17 @@ function renderBatches() {
 
 function rowHtml(r) {
   const l = r.leads || {}
-  const st = stageOf(r)
-  const [pillCls, pillLabel] = STAGE_PILL[st] || STAGE_PILL.queue
-  const [segIcon, segTitle] = SEGMENT_ICON[r.segment] || ['🏠', r.segment]
-  const dots = [1,2,3].map(i => `<span class="inline-block w-1.5 h-1.5 rounded-full ${i <= (r.letters_sent||0) ? 'bg-cyan-600' : 'bg-slate-200'}"></span>`).join('')
+  const [pillCls, pillLabel] = STAGE_PILL[kpiOf(r)] || STAGE_PILL.queued
   return `
   <div data-open="${r.lead_id}" class="row-card bg-white border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-3 cursor-pointer">
     <div class="w-16 h-12 rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center text-slate-300 shrink-0">
       ${l.photo_url ? `<img src="${escape(l.photo_url)}" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-cover" onerror="this.remove()">` : '🏠'}
     </div>
     <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="font-bold text-[15px] text-slate-900 truncate">${escape(l.property_address || '(no address)')}</span>
-        <span class="text-[11px] px-1.5 py-0.5 rounded-md font-semibold ${pillCls} shrink-0">${pillLabel}</span>
-      </div>
-      <div class="text-[13px] text-slate-500 truncate mt-0.5">
-        <span title="${escape(segTitle)}">${segIcon}</span>
-        ${escape(r.mail_to_name || l.owner_full_name || '')}
-        ${l.is_absentee && l.mailing_state && l.mailing_state !== 'NE' ? `<span class="text-red-500 font-medium">· ${escape(l.mailing_state)}</span>` : ''}
-        ${l.primary_phone ? `<span class="text-emerald-600">· ☎ ${escape(l.primary_phone)}</span>` : ''}
-      </div>
+      <div class="font-bold text-[15px] text-slate-900 truncate">${escape(l.property_address || '(no address)')}</div>
+      <div class="text-[13px] text-slate-500 truncate mt-0.5">${escape(r.mail_to_name || l.owner_full_name || '')}</div>
     </div>
-    <div class="hidden sm:flex items-center gap-4 shrink-0 text-right">
-      <div>
-        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Heat</div>
-        <div class="text-sm font-extrabold ${r.heat_score >= 80 ? 'text-orange-600' : r.heat_score >= 55 ? 'text-amber-600' : 'text-slate-500'}">${r.heat_score}</div>
-      </div>
-      <div>
-        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Assessed</div>
-        <div class="text-sm font-semibold text-slate-700">${money(l.assessed_value)}</div>
-      </div>
-      <div>
-        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">B${r.batch_no} · #${r.rank}</div>
-        <div class="flex gap-1 justify-end mt-1.5">${dots}</div>
-      </div>
-    </div>
+    <span class="text-[11px] px-2 py-0.5 rounded-md font-semibold ${pillCls} shrink-0">${pillLabel}</span>
   </div>`
 }
 
@@ -338,13 +317,13 @@ function allResultHtml(p) {
 function renderList() {
   const list = $('list'), empty = $('emptyMsg'), moreWrap = $('moreWrap')
   if (scope === 'all') {
-    $('batchRow').style.display = 'none'; $('stageTabs').style.display = 'none'
+    $('batchRow').style.display = 'none'; $('kpiTiles').style.display = 'none'
     list.innerHTML = allResults.map(allResultHtml).join('')
     empty.classList.toggle('hidden', allResults.length > 0)
     empty.textContent = searchTerm.length < 3 ? 'Type at least 3 characters to search all 96,240 Lincoln properties.' : 'No matches in the county data.'
     moreWrap.classList.add('hidden')
   } else {
-    $('batchRow').style.display = ''; $('stageTabs').style.display = ''
+    $('batchRow').style.display = ''; $('kpiTiles').style.display = ''
     const rows = visibleRows()
     list.innerHTML = rows.slice(0, shown).map(rowHtml).join('')
     empty.classList.toggle('hidden', rows.length > 0)
@@ -368,13 +347,10 @@ $('search').addEventListener('input', (e) => {
 })
 function setScope(s) {
   scope = s
-  $('scopeStack').className = 'px-2 py-1 ' + (s === 'stack' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:text-slate-800')
-  $('scopeAll').className = 'px-2 py-1 ' + (s === 'all' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:text-slate-800')
   if (s === 'all') searchAllLincoln()
   renderList()
 }
-$('scopeStack').addEventListener('click', () => setScope('stack'))
-$('scopeAll').addEventListener('click', () => setScope('all'))
+$('listSelect').addEventListener('change', (e) => setScope(e.target.value))
 
 async function searchAllLincoln() {
   if (scope !== 'all') return
@@ -594,7 +570,7 @@ function renderDetail({ stackRow, p, deal, dist }) {
       const { error } = await sb.from('leads').update({ current_stage: stage, stage_changed_at: new Date().toISOString() }).eq('id', stackRow.lead_id)
       if (error) return alert('Failed: ' + error.message)
       if (stackRow.leads) stackRow.leads.current_stage = stage
-      renderTabs(); renderList()
+      renderKpis(); renderList()
     })
     $('dSaveNotes')?.addEventListener('click', async () => {
       const notes = $('dNotes').value
@@ -735,7 +711,7 @@ async function markLettersSent(ids) {
     }
     for (const id of gids) { const r = stack.find(x => x.lead_id === id); if (r) Object.assign(r, patch) }
   }
-  renderTabs(); renderBatches(); renderList()
+  renderKpis(); renderBatches(); renderList()
 }
 
 $('markMailedBtn').addEventListener('click', () => {
