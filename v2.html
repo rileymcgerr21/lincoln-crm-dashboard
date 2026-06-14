@@ -408,18 +408,17 @@ function renderDetail({ stackRow, p, deal, dist }) {
   const sqft = p?.living_area ? Number(p.living_area) : null
   const tenure = deal?.last_sale_year ? (new Date().getFullYear() - deal.last_sale_year) + ' yrs' : '—'
 
-  // ── Lincoln Anchor valuation ──
-  // assessed ÷ 0.90 (county median assessment ratio). Leave-one-out validated
-  // on 3,130 Lancaster arm's-length sales: 6.7% median error, 65% within 10% —
-  // beat nbh psf comps (11%), shrunk-ratio (6.9%), and psf blends (7.3%).
+  // ── Valuation ──
+  // ARV (fixed-up value) = assessed ÷ 0.90 (county ratio). Leave-one-out
+  // validated on 3,130 Lincoln sales: 6.7% median error. Offer model is
+  // calibrated to 2,041 real Lincoln flip pairs — winning buys land at ~67%
+  // of resale across every price tier. Rehab uses Dan's $/sqft tiers.
   const COUNTY_RATIO = 0.90
   const assd = Number(p?.current_assessed_val ?? l.assessed_value) || null
-  const anchor = assd ? assd / COUNTY_RATIO : null
+  const arv = assd ? assd / COUNTY_RATIO : null
   const isDistressed = /distress|vacant|abandon/.test(dist?.condition_label || '')
-  const rehab = deal?.rehab_estimate != null ? Number(deal.rehab_estimate) : null
-  const mao = anchor != null && rehab != null ? Math.max(0, 0.75 * anchor - rehab) : null
-  const openOffer = mao != null ? 0.60 * mao : null
-  const walkUp = mao != null ? 0.85 * mao : null
+  valCtx = { arv, sqft, isDistressed, slowMarket: deal?.slow_market }
+  rehabTier = defaultTier(dist?.condition_label)
 
   const stackCard = stackRow ? (() => {
     const s = stackRow
@@ -497,47 +496,23 @@ function renderDetail({ stackRow, p, deal, dist }) {
       <div>
         <div class="p-4 bg-white border border-slate-200 rounded-xl mb-4" id="compPanel">
           <div class="flex items-center justify-between gap-2 mb-1">
-            <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">What it's worth</div>
-            <span class="text-[10px] text-slate-400" title="assessed ÷ 0.90 county ratio — validated leave-one-out on 3,130 Lincoln arm's-length sales: 6.7% median error, 65% of predictions within 10%. Beat neighborhood $/sqft comps (11% error).">Lincoln anchor · ±7% validated</span>
+            <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Fixed-up value <span class="text-slate-300 normal-case font-semibold">(ARV — sells for, renovated)</span></div>
+            <span class="text-[10px] text-slate-400" title="assessed ÷ 0.90 county ratio — validated leave-one-out on 3,130 Lincoln arm's-length sales: 6.7% median error, 65% within 10%. Beat neighborhood $/sqft comps (11% error).">±7% validated</span>
           </div>
           <div class="flex items-end gap-3 flex-wrap">
-            <div class="text-3xl font-black text-slate-900">${anchor ? money(anchor) : '—'}</div>
-            ${anchor ? `<div class="text-[12px] text-slate-500 pb-1">likely ${money(anchor * 0.93)} – ${money(anchor * 1.07)}</div>` : ''}
+            <div class="text-3xl font-black text-slate-900">${arv ? money(arv) : '—'}</div>
+            ${arv ? `<div class="text-[12px] text-slate-500 pb-1">likely ${money(arv * 0.93)} – ${money(arv * 1.07)}</div>` : ''}
           </div>
           <div class="text-[12px] text-slate-500 mt-0.5">
             assessed ${money(assd)} ÷ ${COUNTY_RATIO} county ratio
             ${l.zillow_zestimate ? ` · zestimate ${money(l.zillow_zestimate)}` : ''}
-            ${deal?.as_is_estimate ? ` · model as-is ${money(deal.as_is_estimate)}` : ''}
+            ${deal?.as_is_estimate ? ` · model ${money(deal.as_is_estimate)}` : ''}
           </div>
-          ${isDistressed ? `<div class="mt-2 text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">⚠ Photo-distressed (${escape(dist.condition_label)}) — the assessor may not see the inside. The anchor is the <b>fixed-up-ish</b> number; let the rehab estimate do the discounting in the offer.</div>` : ''}
+          ${isDistressed ? `<div class="mt-2 text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">⚠ Photo-distressed (${escape(dist.condition_label)}) — assessor may not see inside. Set the condition dial to full gut and the offer drops to match.</div>` : ''}
           <div id="compBody" class="mt-3 pt-3 border-t border-slate-100 text-sm text-slate-400">Pulling comp cross-check…</div>
         </div>
 
-        <div class="p-4 bg-slate-900 rounded-xl">
-          <div class="flex items-center justify-between mb-2">
-            <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">📞 Call card — what to offer</div>
-            ${deal?.slow_market ? '<span class="text-[10px] font-bold text-rose-300">⚠ slow market — stay low</span>' : ''}
-          </div>
-          <div class="grid grid-cols-3 gap-2 text-center">
-            <div class="p-2 bg-white/5 border border-white/10 rounded-lg">
-              <div class="text-[10px] uppercase font-bold text-emerald-300">Open at</div>
-              <div class="text-base font-extrabold text-white">${money(openOffer)}</div>
-            </div>
-            <div class="p-2 bg-white/5 border border-white/10 rounded-lg">
-              <div class="text-[10px] uppercase font-bold text-amber-300">Walk-up max</div>
-              <div class="text-base font-extrabold text-white">${money(walkUp)}</div>
-            </div>
-            <div class="p-2 bg-white/5 border border-white/10 rounded-lg">
-              <div class="text-[10px] uppercase font-bold text-red-300">Ceiling (MAO)</div>
-              <div class="text-base font-extrabold text-white">${money(mao)}</div>
-            </div>
-          </div>
-          <div class="text-[11px] text-slate-400 mt-2 leading-relaxed">
-            MAO = 75% × ${money(anchor)} anchor − ${money(rehab)} rehab · 60-day margin ${money(deal?.net_margin_60d)}.
-            Model says: open ${money(deal?.starting_offer)} · wholesale ${money(deal?.wholesale_offer)}.
-            <b class="text-slate-300">Never quote the anchor number on a call.</b>
-          </div>
-        </div>
+        <div id="offerBox" class="p-4 bg-slate-900 rounded-xl"></div>
 
         ${stackRow ? `
         <div class="p-4 bg-white border border-slate-200 rounded-xl mt-4">
@@ -548,6 +523,8 @@ function renderDetail({ stackRow, p, deal, dist }) {
         </div>` : ''}
       </div>
     </div>`
+
+  paintOffer()
 
   // Bind actions
   if (stackRow) {
@@ -580,6 +557,99 @@ function renderDetail({ stackRow, p, deal, dist }) {
       $('dSaveOk').classList.remove('hidden'); setTimeout(() => $('dSaveOk')?.classList.add('hidden'), 1500)
     })
   }
+}
+
+// ─────── OFFER MODEL ───────
+// Dan's clean-and-flip math, calibrated to 2,041 real Lincoln flip pairs
+// (winning buys = ~67% of resale). Rehab uses Dan's $/sqft tiers. The dial
+// re-renders just this panel, so the comp cross-check above is untouched.
+let valCtx = null
+let rehabTier = 'medium'
+const REHAB_PSF   = { light: 10, medium: 20, gut: 30 }
+const REHAB_LABEL = { light: 'Light', medium: 'Paint·floor·kitchen', gut: 'Full gut' }
+const REHAB_DESC  = { light: '$10/sf', medium: '$20/sf', gut: '$30/sf' }
+const MARKET_BUY_PCT = 0.67   // empirical: flips acquire at ~67% of resale
+const COST_PCT = 0.10         // selling + holding + closing, share of ARV
+const PROFIT_PCT = 0.15       // target profit, share of ARV
+const roundK = (n) => Math.round(n / 1000) * 1000
+
+function defaultTier(condition) {
+  const c = (condition || '').toLowerCase()
+  if (/sever|vacant|abandon/.test(c)) return 'gut'
+  if (/distress|moderate|clutter/.test(c)) return 'medium'
+  if (/pristine|well-maintain|renovat|occupied-rental|maintained/.test(c)) return 'light'
+  return 'medium'
+}
+
+window.setRehabTier = (t) => { rehabTier = t; paintOffer() }
+
+function paintOffer() {
+  const box = document.getElementById('offerBox'); if (!box || !valCtx) return
+  const { arv, sqft, slowMarket } = valCtx
+  if (!arv) { box.innerHTML = '<div class="text-slate-400 text-[13px]">No assessed value — can\'t price this one.</div>'; return }
+
+  const rehab = sqft ? REHAB_PSF[rehabTier] * sqft : null
+  const asIs = rehab != null ? arv - rehab : null
+  // Max offer = ARV − rehab − costs − profit (rehab-aware). Cross-checked
+  // against the market-typical 67% of ARV.
+  const maxOffer = rehab != null ? roundK(arv * (1 - COST_PCT - PROFIT_PCT) - rehab) : null
+  const market67 = roundK(MARKET_BUY_PCT * arv)
+  const open = maxOffer != null ? roundK(maxOffer * 0.90) : null
+  const walk = maxOffer != null ? roundK(maxOffer * 0.96) : null
+
+  const dial = ['light', 'medium', 'gut'].map(t => {
+    const on = t === rehabTier
+    return `<button onclick="setRehabTier('${t}')" class="flex-1 px-2 py-1.5 rounded-lg text-[11px] font-bold border ${on ? 'bg-white text-slate-900 border-white' : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'}">${REHAB_LABEL[t]}<div class="text-[9px] font-medium ${on ? 'text-slate-500' : 'text-slate-500'}">${REHAB_DESC[t]}</div></button>`
+  }).join('')
+
+  // Is the rehab-aware max above or below what the market typically pays?
+  const vsMarket = (maxOffer != null && market67)
+    ? (maxOffer <= market67
+      ? `<span class="text-emerald-300">at/under the ~67% mark</span>`
+      : `<span class="text-amber-300">above the ~67% mark — light rehab earns it, but don't drift higher</span>`)
+    : ''
+
+  box.innerHTML = `
+    <div class="flex items-center justify-between mb-2">
+      <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">📞 What to offer</div>
+      ${slowMarket ? '<span class="text-[10px] font-bold text-rose-300">⚠ slow market — stay low</span>' : ''}
+    </div>
+
+    <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Condition on the call → repairs</div>
+    <div class="flex gap-1.5 mb-3">${dial}</div>
+
+    <div class="grid grid-cols-2 gap-2 mb-3">
+      <div class="p-2.5 bg-white/5 border border-white/10 rounded-lg">
+        <div class="text-[10px] uppercase font-bold text-slate-400">Worth as-is</div>
+        <div class="text-lg font-extrabold text-white">${asIs != null ? money(asIs) : '—'}</div>
+        <div class="text-[10px] text-slate-500">${money(arv)} − ${rehab != null ? money(rehab) : '—'} repairs</div>
+      </div>
+      <div class="p-2.5 bg-emerald-500/10 border border-emerald-400/30 rounded-lg">
+        <div class="text-[10px] uppercase font-bold text-emerald-300">Your max offer</div>
+        <div class="text-lg font-extrabold text-white">${maxOffer != null ? money(maxOffer) : '—'}</div>
+        <div class="text-[10px] text-slate-500">market pays ~${money(market67)}</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-2 text-center mb-2">
+      <div class="p-2 bg-white/5 border border-white/10 rounded-lg">
+        <div class="text-[10px] uppercase font-bold text-slate-400">Open</div>
+        <div class="text-base font-extrabold text-white">${open != null ? money(open) : '—'}</div>
+      </div>
+      <div class="p-2 bg-white/5 border border-white/10 rounded-lg">
+        <div class="text-[10px] uppercase font-bold text-slate-400">Walk-up</div>
+        <div class="text-base font-extrabold text-white">${walk != null ? money(walk) : '—'}</div>
+      </div>
+      <div class="p-2 bg-white/5 border border-white/10 rounded-lg ring-1 ring-emerald-400/40">
+        <div class="text-[10px] uppercase font-bold text-emerald-300">Ceiling</div>
+        <div class="text-base font-extrabold text-white">${maxOffer != null ? money(maxOffer) : '—'}</div>
+      </div>
+    </div>
+
+    <div class="text-[11px] text-slate-400 leading-relaxed">
+      Max = ${money(arv)} fixed-up − ${rehab != null ? money(rehab) : '—'} repairs (${REHAB_LABEL[rehabTier].toLowerCase()}) − ${Math.round((COST_PCT + PROFIT_PCT) * 100)}% costs &amp; profit. ${vsMarket}.
+      <b class="text-slate-300">Open at the green number, climb toward the ceiling, never past it.</b>
+    </div>`
 }
 
 // ─────── COMP ENGINE ───────
