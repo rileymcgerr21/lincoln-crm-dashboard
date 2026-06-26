@@ -76,6 +76,14 @@
     <div class="max-w-6xl mx-auto px-4 pb-3 flex items-center justify-between gap-2 flex-wrap" id="batchRow">
       <div class="flex items-center gap-1 flex-wrap" id="batchChips"></div>
       <div class="flex items-center gap-2">
+        <select id="segSelect" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-700 focus:border-slate-500 focus:outline-none cursor-pointer" title="Filter to one segment before exporting — the card pitch is per-segment">
+          <option value="all">All segments</option>
+          <option value="owner_occupant">🏠 Owner-occupant</option>
+          <option value="absentee_oos">✈️ Out-of-state</option>
+          <option value="absentee_local">📍 Local absentee</option>
+          <option value="landlord_3to9">🏘 Small landlord</option>
+          <option value="investor_10plus">🏢 Investor 10+</option>
+        </select>
         <span id="listSummary" class="text-xs text-slate-500"></span>
         <button id="exportBtn" class="px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg text-slate-700 hover:border-slate-400">⤓ CSV</button>
         <button id="markMailedBtn" class="px-2.5 py-1.5 text-xs font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-500">✓ Mark batch mailed</button>
@@ -122,6 +130,7 @@ let stack = []                 // mailing_stack rows with embedded lead
 let byParcel = new Map()       // parcel_id → stack row
 let currentStageTab = 'all'
 let currentBatch = 'all'
+let currentSegment = 'all'
 let searchTerm = ''
 let scope = 'stack'            // 'stack' | 'all'
 let shown = 100
@@ -221,6 +230,7 @@ function visibleRows() {
   return stack.filter(r => {
     if (currentStageTab !== 'all' && kpiOf(r) !== currentStageTab) return false
     if (currentBatch !== 'all' && r.batch_no !== currentBatch) return false
+    if (currentSegment !== 'all' && r.segment !== currentSegment) return false
     if (searchTerm) {
       const l = r.leads || {}
       const hay = [l.owner_full_name, l.owner_entity_name, l.property_address, l.mailing_address, r.mail_to_name].filter(Boolean).join(' ').toLowerCase()
@@ -336,6 +346,7 @@ function renderList() {
   list.querySelectorAll('[data-openparcel]').forEach(el => el.addEventListener('click', () => openDetailByParcel(el.dataset.openparcel)))
 }
 $('moreBtn').addEventListener('click', () => { shown += 200; renderList() })
+$('segSelect').addEventListener('change', (e) => { currentSegment = e.target.value; shown = 100; renderList() })
 
 // ─────── SEARCH ───────
 $('search').addEventListener('input', (e) => {
@@ -805,9 +816,12 @@ function landmarkOf(propAddr) {
   let s = String(propAddr).split(',')[0].trim()          // street part only
   s = s.replace(/^\s*\d+\s+/, '')                          // drop house number
   s = s.toLowerCase().replace(/\b([a-z])/g, m => m.toUpperCase())  // Title Case
-  s = s.replace(/^(N|S|E|W|NE|NW|SE|SW)\b/i, d => DIRS[d.toUpperCase()] || d)  // expand directional
-  s = s.replace(/\s+(St|Street)\.?$/i, '')                 // drop generic "St" (keep Ave/Blvd/Dr/etc.)
+  s = s.replace(/^(NE|NW|SE|SW|N|S|E|W)\b/i, d => DIRS[d.toUpperCase()] || d)  // expand directional (multi-letter first)
+  if (/\d/.test(s)) s = s.replace(/\s+(St|Street)\.?$/i, '')  // drop "St" only on numbered streets (keep "B St", "South St")
   return s.trim()
+}
+function firstNameOf(sal) {  // clean single first name for the card greeting
+  return String(sal || '').replace(/\s*[&,].*$/, '').trim().split(/\s+/)[0] || ''
 }
 
 // Export the printer's 5-column schema (first_name, landmark, full_name,
@@ -815,31 +829,44 @@ function landmarkOf(propAddr) {
 $('exportBtn').addEventListener('click', () => {
   const rows = visibleRows()
   if (rows.length === 0) return
-  // The card greets "Hi {first}," so it needs a first name. Trusts/LLCs/estates
-  // (no first name) need a separate no-greeting piece — skip them here.
-  const named = rows.filter(r => (r.salutation || '').trim())
-  const skipped = rows.length - named.length
-  if (named.length === 0) { alert('No named recipients in this view. Trusts/LLCs/estates need a separate no-greeting run.'); return }
+  // The card greets "Hi {first}," so it needs a first name; skip no-name
+  // (trusts/LLCs/estates → separate no-greeting run), messy/indirect mailings
+  // (Attn:/contract/PO box → manual), and one letter per mailbox (dedup).
+  const seen = new Set()
+  let skipNoName = 0, skipMessy = 0, skipDup = 0
+  const out = []
+  for (const r of rows) {
+    const l = r.leads || {}
+    if (!firstNameOf(r.salutation)) { skipNoName++; continue }
+    const ma = (l.mailing_address || '').trim()
+    if (!ma || /attn|contract|box /i.test(ma)) { skipMessy++; continue }
+    const key = ma.toUpperCase().replace(/\s+/g, ' ').trim()
+    if (seen.has(key)) { skipDup++; continue }
+    seen.add(key)
+    out.push(r)
+  }
+  if (out.length === 0) { alert('No printable named recipients in this view.'); return }
   const cols = ['first_name','landmark','full_name','address_line','city_state_zip']
   const lines = [cols.join(',')]
-  for (const r of named) {
+  for (const r of out) {
     const l = r.leads || {}
     const csz = `${l.mailing_city || ''}, ${l.mailing_state || ''} ${l.mailing_zip || ''}`.replace(/^,\s*/, '').replace(/\s+/g, ' ').trim()
     lines.push([
-      csvCell((r.salutation || '').trim()),
+      csvCell(firstNameOf(r.salutation)),
       csvCell(landmarkOf(l.property_address)),
       csvCell(r.mail_to_name || l.owner_full_name || ''),
-      csvCell(l.mailing_address || ''),
+      csvCell((l.mailing_address || '').replace(/\s+/g, ' ').trim()),
       csvCell(csz),
     ].join(','))
   }
+  const tag = (currentSegment && currentSegment !== 'all') ? currentSegment : 'batch-' + currentBatch
   const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url
-  a.download = `leads-batch-${currentBatch}.csv`
+  a.download = `leads-${tag}.csv`
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
-  if (skipped) setTimeout(() => alert(`Exported ${named.length} named recipients as leads-batch-${currentBatch}.csv.\nSkipped ${skipped} no-name (trusts/LLCs/estates) — those need a separate no-greeting run.`), 150)
+  setTimeout(() => alert(`Exported ${out.length} cards as leads-${tag}.csv.\nSkipped: ${skipNoName} no-name (trusts/estates), ${skipMessy} indirect/Attn/PO-box, ${skipDup} duplicate mailbox.`), 150)
 })
 
 // ─────── BOOT ───────
