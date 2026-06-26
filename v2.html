@@ -797,18 +797,49 @@ function csvCell(v) {
   const s = Array.isArray(v) ? v.join('|') : String(v)
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
+// Derive the card "landmark" (street) from a property address:
+// "1429 N 31ST ST, LINCOLN, NE, 68503" -> "North 31st"
+const DIRS = { N:'North', S:'South', E:'East', W:'West', NE:'Northeast', NW:'Northwest', SE:'Southeast', SW:'Southwest' }
+function landmarkOf(propAddr) {
+  if (!propAddr) return ''
+  let s = String(propAddr).split(',')[0].trim()          // street part only
+  s = s.replace(/^\s*\d+\s+/, '')                          // drop house number
+  s = s.toLowerCase().replace(/\b([a-z])/g, m => m.toUpperCase())  // Title Case
+  s = s.replace(/^(N|S|E|W|NE|NW|SE|SW)\b/i, d => DIRS[d.toUpperCase()] || d)  // expand directional
+  s = s.replace(/\s+(St|Street)\.?$/i, '')                 // drop generic "St" (keep Ave/Blvd/Dr/etc.)
+  return s.trim()
+}
+
+// Export the printer's 5-column schema (first_name, landmark, full_name,
+// address_line, city_state_zip) — feeds handwriting-engine\batch_queue.py.
 $('exportBtn').addEventListener('click', () => {
   const rows = visibleRows()
   if (rows.length === 0) return
-  const cols = ['rank','batch_no','heat_score','heat_reasons','segment','salutation_class','salutation','mail_to_name','mail_to_address','property_address','letters_sent','house_detail','letter_draft','lead_id']
+  // The card greets "Hi {first}," so it needs a first name. Trusts/LLCs/estates
+  // (no first name) need a separate no-greeting piece — skip them here.
+  const named = rows.filter(r => (r.salutation || '').trim())
+  const skipped = rows.length - named.length
+  if (named.length === 0) { alert('No named recipients in this view. Trusts/LLCs/estates need a separate no-greeting run.'); return }
+  const cols = ['first_name','landmark','full_name','address_line','city_state_zip']
   const lines = [cols.join(',')]
-  for (const r of rows) lines.push(cols.map(c => c === 'property_address' ? csvCell(r.leads?.property_address) : csvCell(r[c])).join(','))
+  for (const r of named) {
+    const l = r.leads || {}
+    const csz = `${l.mailing_city || ''}, ${l.mailing_state || ''} ${l.mailing_zip || ''}`.replace(/^,\s*/, '').replace(/\s+/g, ' ').trim()
+    lines.push([
+      csvCell((r.salutation || '').trim()),
+      csvCell(landmarkOf(l.property_address)),
+      csvCell(r.mail_to_name || l.owner_full_name || ''),
+      csvCell(l.mailing_address || ''),
+      csvCell(csz),
+    ].join(','))
+  }
   const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url
-  a.download = `mailing-batch-${currentBatch}-${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = `leads-batch-${currentBatch}.csv`
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+  if (skipped) setTimeout(() => alert(`Exported ${named.length} named recipients as leads-batch-${currentBatch}.csv.\nSkipped ${skipped} no-name (trusts/LLCs/estates) — those need a separate no-greeting run.`), 150)
 })
 
 // ─────── BOOT ───────
